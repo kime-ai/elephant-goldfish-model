@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Plugin } from "@opencode/plugin"
-import { isolate, parseAgents, type Message, type Request } from "./isolate.ts"
+import { isolate, type Message, type Request } from "./isolate.ts"
+import { parseAgents } from "./options.ts"
 
 // OpenCode V2 adds AGENTS.md to every agent's context, including subagents.
 // For the agents named in `options.agents`, remove ambient AGENTS.md from the
