@@ -289,6 +289,19 @@ def test_v2_install_native_contract(tmp_path: Path) -> None:
         assert identity["sha256"][key] == hashlib.sha256(source.read_bytes()).hexdigest()
 
 
+@pytest.mark.parametrize("interface", ["v1", "v2"])
+def test_agent_prompts_cannot_be_mistaken_for_an_instruction_block(interface: str, tmp_path: Path) -> None:
+    # The V1 plugin treats any line that starts "Instructions from: " as an instruction block and
+    # refuses the request when it cannot match the block to a file. A prompt with such a line would
+    # make every reviewer request fail.
+    config = json.loads(ADAPTER["install"](tmp_path / "candidate", interface).read_text())
+    agents = config["agent"] if interface == "v1" else config["agents"]
+    key = "prompt" if interface == "v1" else "system"
+    assert len(agents) == 9
+    for name, agent in agents.items():
+        assert not re.search(r"^Instructions from: ", agent[key], re.MULTILINE), name
+
+
 def test_v1_install_adds_isolation_plugin(tmp_path: Path) -> None:
     destination = tmp_path / "candidate"
     config = json.loads(ADAPTER["install"](destination).read_text())
