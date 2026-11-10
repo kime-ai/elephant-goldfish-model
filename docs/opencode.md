@@ -3,7 +3,7 @@
 # OpenCode V1 integration (experimental)
 
 This adapter targets OpenCode CLI **1.18.29**, with V1 `task` and `permission` interfaces.
-It does not target V2 `subagent` or `permissions` interfaces.
+It does not target V2 `subagent` or `permissions` interfaces; for OpenCode 2.x, see the [V2 integration](opencode_v2.md).
 Installation checks do not establish workflow or isolation support.
 Maintainer approval, live workflows, and isolation verification remain pending under [#146](https://github.com/google/elephant-goldfish-model/issues/146).
 The proposed architecture is in [the additional harness design](designs/additional-harnesses.md).

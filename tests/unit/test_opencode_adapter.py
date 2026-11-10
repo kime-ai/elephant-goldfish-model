@@ -187,3 +187,101 @@ def test_env_matching_destination_is_rejected(tmp_path: Path, suffix: str) -> No
     with pytest.raises(ValueError, match="read rules"):
         ADAPTER["install"](tmp_path / suffix)
     assert not list(tmp_path.iterdir())
+
+
+def test_unknown_host_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Unknown OpenCode host"):
+        ADAPTER["install"](tmp_path / "candidate", "v3")
+    assert not list(tmp_path.iterdir())
+
+
+# V2 base policy every agent starts with; agent rules are appended after it.
+V2_BASE = [
+    {"action": "*", "resource": "*", "effect": "allow"},
+    {"action": "read", "resource": "*.env", "effect": "ask"},
+    {"action": "read", "resource": "*.env.*", "effect": "ask"},
+    {"action": "read", "resource": "*.env.example", "effect": "allow"},
+]
+
+
+def v2_effect(rules: list, action: str, resource: str) -> str:
+    """V2 evaluation: whole-value wildcards on action and resource, last match wins."""
+    effect = "ask"
+    for item in V2_BASE + rules:
+        if v1_match(item["action"], action) and v1_match(item["resource"], resource):
+            effect = item["effect"]
+    return effect
+
+
+def test_v2_install_native_contract(tmp_path: Path) -> None:
+    destination = tmp_path / "EGM v2 ü"
+    config = json.loads(ADAPTER["install"](destination, "v2").read_text())
+    identity = json.loads((destination / "installation.json").read_text())
+    bundle = destination / "bundle"
+    assert identity["host_version"] == "2.2.5"
+    assert not {"agent", "command", "permission", "autoupdate"} & set(config)
+    assert config["default_agent"] == "egm"
+    assert config["skills"] == [str(destination / "skills")]
+    assert len(config["commands"]) == 7
+    for skill in (ROOT / "skills").glob("*/SKILL.md"):
+        key = ADAPTER["name"](skill)
+        assert (destination / "skills" / key / "SKILL.md").read_bytes() == skill.read_bytes()
+        command = config["commands"][key]
+        assert command["agent"] == "egm"
+        assert "$ARGUMENTS" in command["template"]
+        assert str(bundle / "docs/opencode_v2.md") in command["template"]
+
+    assert len(config["agents"]) == 9
+    reviewers = set(config["agents"]) - {"egm"}
+    for filename in ADAPTER["REVIEWERS"]:
+        persona = bundle / "agents" / f"{filename}.md"
+        agent = config["agents"][ADAPTER["name"](persona)]
+        assert agent["mode"] == "subagent"
+        assert not {"prompt", "permission", "tools"} & set(agent)
+        assert str(persona) in agent["system"]
+        assert agent["permissions"][0] == {"action": "*", "resource": "*", "effect": "deny"}
+    primary = config["agents"]["egm"]
+    assert primary["mode"] == "primary"
+    assert "Omit sessionID" in primary["system"]
+    assert "task_id" not in primary["system"]
+    allowed = {r["resource"] for r in primary["permissions"]
+               if r["action"] == "subagent" and r["effect"] == "allow"}
+    assert allowed == reviewers
+    guide = " ".join((bundle / "docs/opencode_v2.md").read_text().split())
+    assert "Do not pass parent history, private reasoning, or memory." in guide
+
+
+def test_v2_permissions_enforce_reviewer_boundary(tmp_path: Path) -> None:
+    destination = tmp_path / "candidate"
+    config = json.loads(ADAPTER["install"](destination, "v2").read_text())
+    bundle = destination / "bundle"
+    required = [
+        bundle / "docs/opencode_v2.md",
+        *(bundle / "agents").glob("*.md"),
+        *(bundle / "resources").rglob("*.md"),
+    ]
+    for name, agent in config["agents"].items():
+        rules = agent["permissions"]
+        reviewer = name != "egm"
+        # External reads are checked as canonical absolute paths plus a "/*" boundary.
+        for path in required:
+            assert v2_effect(rules, "read", str(path)) == "allow", (name, path)
+            assert v2_effect(rules, "external_directory", f"{path.parent}/*") == "allow"
+        assert v2_effect(rules, "external_directory", "/etc/*") == ("deny" if reviewer else "ask")
+        secret = "deny" if reviewer else "ask"
+        for path in (".env", "app/.env", ".env.local", "app/.env.production", "prod.env"):
+            assert v2_effect(rules, "read", path) == secret, (name, path)
+        assert v2_effect(rules, "read", "app/.env.example") == "allow"
+        assert v2_effect(rules, "subagent", "general") == "deny"
+        assert v2_effect(rules, "skill", "browser") == "deny"
+        if reviewer:
+            for action, resource in (
+                ("grep", ".*"), ("shell", "cat .env"), ("edit", "x.md"),
+                ("webfetch", "https://example.com"), ("question", "*"),
+                ("subagent", "egm-style"), ("opencode_read_mcp_resource", "s:u"), ("execute", "*"),
+            ):
+                assert v2_effect(rules, action, resource) == "deny", (name, action)
+        if not reviewer:
+            assert v2_effect(rules, "question", "*") == "allow"
+            assert v2_effect(rules, "edit", "design_draft.md") == "ask"
+            assert v2_effect(rules, "skill", "egm-review") == "allow"
