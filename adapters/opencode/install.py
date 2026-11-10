@@ -13,7 +13,7 @@ import re
 import shutil
 
 ROOT = Path(__file__).resolve().parents[2]
-ISOLATION_PLUGIN = Path("adapters/opencode/goldfish_isolation")
+ISOLATION_PLUGIN = Path("adapters/opencode/plugin")
 # Instruction files the host injects into every agent. Goldfish reviewers must not read them;
 # each name is matched at the worktree root and in any directory, never as a suffix.
 INSTRUCTION_FILES = {
@@ -184,10 +184,17 @@ def v1_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
         "autoupdate": False,
         "default_agent": "egm",
         "skills": {"paths": [str(skills)]},
-        "plugin": [[str(bundle / ISOLATION_PLUGIN / "v1.ts"), {"agents": sorted(set(agents) - {"egm"})}]],
+        "plugin": [[str(bundle / ISOLATION_PLUGIN / "v1.ts"), plugin_options(bundle)]],
         "agent": agents,
         "command": commands,
     }
+
+
+def plugin_options(bundle: Path) -> dict:
+    """The installer's contract with the guard plugin: the orchestrator, the bundle, and each
+    reviewer's agent ID with its persona path. The plugin reads only the reviewer IDs today."""
+    personas = {name(path): str(path) for path in (bundle / "agents" / f"{r}.md" for r in REVIEWERS)}
+    return {"primary": "egm", "bundle": str(bundle), "reviewers": personas}
 
 
 def instruction_patterns(interface: str) -> list[str]:
@@ -263,10 +270,7 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
         "default_agent": "egm",
         "skills": [str(skills)],
         "experimental": {"todo": True},
-        "plugins": [{
-            "package": str(bundle / ISOLATION_PLUGIN),
-            "options": {"agents": sorted(set(agents) - {"egm"})},
-        }],
+        "plugins": [{"package": str(bundle / ISOLATION_PLUGIN), "options": plugin_options(bundle)}],
         "agents": agents,
         "commands": commands,
     }

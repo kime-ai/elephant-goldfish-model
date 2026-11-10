@@ -25,7 +25,7 @@ export type Read = (path: string) => Promise<string | undefined>
 export type Log = (line: string) => void
 
 const refuse = (reason: string): never => {
-  throw new Error(`egm-goldfish-isolation: ${reason}; refusing the request`)
+  throw new Error(`egm-guard: ${reason}; refusing the request`)
 }
 const unverifiable = (path: string) => refuse(`cannot remove the instructions from ${path}`)
 
@@ -128,7 +128,7 @@ export const isolation = (agents: ReadonlySet<string>, read: Read, log: Log) => 
       }
       if (!agents.has(agent)) return
       const removed = await withoutAmbient(system, read)
-      if (removed > 0) log(`[egm-goldfish-isolation] ${agent}: removed ${removed} instruction block(s)`)
+      if (removed > 0) log(`[egm-guard] ${agent}: removed ${removed} instruction block(s)`)
     },
   }
 }

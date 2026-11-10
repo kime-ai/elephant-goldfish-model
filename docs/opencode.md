@@ -34,7 +34,7 @@ Inspect the generated `opencode.json` and `installation.json` before use.
 The latter records package identity, the probed host release as `host_version`, and SHA-256
 hashes of all bundled files.
 The native configuration contains seven commands, eight reviewers, the `egm` primary agent,
-and the `egm-goldfish-isolation` plugin described under [Instruction isolation](#instruction-isolation).
+and the `egm-guard` plugin described under [Instruction isolation](#instruction-isolation).
 Native skill aliases use the canonical frontmatter names and link to the unchanged skill directories.
 
 Start OpenCode from the project directory with the candidate configuration:
@@ -122,9 +122,10 @@ working directory up to the worktree root, or else every `CLAUDE.md` on that pat
 reads a file, the read tool also appends nearby instruction files to its output in a
 `<system-reminder>` and lists their paths in `metadata.loaded`.
 
-The installer copies `adapters/opencode/goldfish_isolation/` into the bundle and lists its
-`v1.ts` entry under `plugin`, with the eight reviewer names as its `agents` option. For those
-agents it removes every instruction block, not only `AGENTS.md`:
+The installer copies `adapters/opencode/plugin/` into the bundle and lists its `v1.ts` entry
+under `plugin`. Its options are `primary`, `bundle`, and `reviewers`, which maps each reviewer's
+agent ID to its persona path; the plugin reads only the IDs. For those agents it removes every
+instruction block, not only `AGENTS.md`:
 
 - `experimental.chat.messages.transform` records each session's agent from its latest user
   message, and strips the reminder from reviewer sessions' read results.
@@ -142,11 +143,11 @@ agent keeps its instructions.
 
 The plugin fails closed. If it cannot verify a block, such as a remote `instructions` URL or a
 file that changed during the request, it throws. OpenCode then ends the reviewer task with
-`egm-goldfish-isolation: cannot remove the instructions from <path>; refusing the request`
+`egm-guard: cannot remove the instructions from <path>; refusing the request`
 instead of sending it. A request with instructions from a session it never recorded, which
 would mean OpenCode changed the order above, is refused the same way for every agent. The
-plugin also refuses to load without a non-empty `agents` list. When it acts, it logs
-`[egm-goldfish-isolation] <agent>: removed N instruction block(s)` to stderr.
+plugin also refuses to load without a non-empty `reviewers` map. When it acts, it logs
+`[egm-guard] <agent>: removed N instruction block(s)` to stderr.
 
 It depends on two experimental hooks and on the rendering above, so repeat the native probe
 after upgrading OpenCode. `glob` still shows that an instruction file exists.

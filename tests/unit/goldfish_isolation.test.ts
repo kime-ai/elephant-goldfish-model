@@ -3,9 +3,9 @@
 
 // Run through tests/unit/test_goldfish_isolation.py, or directly with `bun test`.
 import { describe, expect, test } from "bun:test"
-import { isolate } from "../../adapters/opencode/goldfish_isolation/isolate.ts"
-import { parseAgents } from "../../adapters/opencode/goldfish_isolation/options.ts"
-import type { Message, Request, SystemPart } from "../../adapters/opencode/goldfish_isolation/isolate.ts"
+import { isolate } from "../../adapters/opencode/plugin/isolate.ts"
+import { parseReviewers } from "../../adapters/opencode/plugin/options.ts"
+import type { Message, Request, SystemPart } from "../../adapters/opencode/plugin/isolate.ts"
 
 const REVIEWERS = new Set(["egm-structural"])
 const AMBIENT = "Instructions from: /p/AGENTS.md\nSECRET"
@@ -166,17 +166,25 @@ describe("other agents", () => {
   })
 })
 
-describe("parseAgents", () => {
-  test("returns the configured reviewer names", () => {
-    expect(parseAgents({ agents: ["egm-style", "egm-structural"] })).toEqual(
-      new Set(["egm-style", "egm-structural"]),
-    )
+describe("parseReviewers", () => {
+  const personas = { "egm-style": "/b/agents/style.md", "egm-structural": "/b/agents/structural.md" }
+
+  test("returns the reviewer agent IDs from the installer's options", () => {
+    const options = { primary: "egm", bundle: "/b", reviewers: personas }
+    expect(parseReviewers(options)).toEqual(new Set(["egm-style", "egm-structural"]))
   })
 
-  test.each([undefined, {}, { agents: [] }, { agents: "egm-style" }, { agents: ["egm-style", 1] }, { agents: [""] }])(
-    "rejects misconfigured options %#",
-    (options) => {
-      expect(() => parseAgents(options)).toThrow(/^egm-goldfish-isolation: options\.agents/)
-    },
-  )
+  test.each([
+    undefined,
+    {},
+    { reviewers: {} },
+    { reviewers: ["egm-style"] },
+    { reviewers: "egm-style" },
+    { reviewers: { "egm-style": 1 } },
+    { reviewers: { "egm-style": "" } },
+    { reviewers: { "": "/b/agents/style.md" } },
+    { agents: ["egm-style"] },
+  ])("rejects misconfigured options %#", (options) => {
+    expect(() => parseReviewers(options)).toThrow(/^egm-guard: options\.reviewers/)
+  })
 })

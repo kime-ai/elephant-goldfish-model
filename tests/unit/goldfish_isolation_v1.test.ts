@@ -10,7 +10,7 @@ import {
   withoutNested,
   type Entry,
   type Part,
-} from "../../adapters/opencode/goldfish_isolation/isolate_v1.ts"
+} from "../../adapters/opencode/plugin/isolate_v1.ts"
 
 const REVIEWERS = new Set(["egm-structural"])
 
@@ -144,7 +144,7 @@ describe("withoutAmbient", () => {
     { name: "a longer block", text: "Instructions from: /p/AGENTS.md\nAMBIENT MORE", contents: { "/p/AGENTS.md": "AMBIENT" } },
   ])("refuses $name", async ({ text, contents }) => {
     const system = [`${HEAD}\n${text}`]
-    await expect(withoutAmbient(system, files(contents))).rejects.toThrow(/egm-goldfish-isolation/)
+    await expect(withoutAmbient(system, files(contents))).rejects.toThrow(/egm-guard/)
   })
 })
 
@@ -165,7 +165,7 @@ describe("isolation", () => {
     await hooks.system("child", system)
     expect(outputs(transcript)).toEqual([undefined, CONTENT])
     expect(system).toEqual([HEAD])
-    expect(lines).toEqual(["[egm-goldfish-isolation] egm-structural: removed 1 instruction block(s)"])
+    expect(lines).toEqual(["[egm-guard] egm-structural: removed 1 instruction block(s)"])
   })
 
   test("logs nothing when a reviewer request has no instructions", async () => {
@@ -180,7 +180,7 @@ describe("isolation", () => {
     async ({ sessionID }) => {
       const { hooks } = setup()
       hooks.messages([user("egm", "parent")])
-      await expect(hooks.system(sessionID, [prompt])).rejects.toThrow(/^egm-goldfish-isolation: .*agent/)
+      await expect(hooks.system(sessionID, [prompt])).rejects.toThrow(/^egm-guard: .*agent/)
     },
   )
 

@@ -14,6 +14,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTER = runpy.run_path(str(ROOT / "adapters/opencode/install.py"))
+PLUGIN = "adapters/opencode/plugin"
+
+
+def expected_plugin_options(bundle: Path) -> dict:
+    """The installer's contract with the guard plugin, as proposed on #282."""
+    personas = {
+        ADAPTER["name"](bundle / "agents" / f"{filename}.md"): str(bundle / "agents" / f"{filename}.md")
+        for filename in ADAPTER["REVIEWERS"]
+    }
+    return {"primary": "egm", "bundle": str(bundle), "reviewers": personas}
+
+
 V1_INSTRUCTION_RULES = [
     pattern
     for filename in ("AGENTS.md", "agents.md", "CLAUDE.md", "claude.md", "CONTEXT.md", "context.md")
@@ -264,13 +276,14 @@ def test_v2_install_native_contract(tmp_path: Path) -> None:
     assert "Do not pass parent history, private reasoning, or memory." in guide
 
     assert config["experimental"] == {"todo": True}
-    plugin = bundle / "adapters/opencode/goldfish_isolation"
-    assert config["plugins"] == [{"package": str(plugin), "options": {"agents": sorted(reviewers)}}]
-    sources = sorted((ROOT / "adapters/opencode/goldfish_isolation").glob("*.ts"))
+    plugin = bundle / PLUGIN
+    assert config["plugins"] == [{"package": str(plugin), "options": expected_plugin_options(bundle)}]
+    assert set(expected_plugin_options(bundle)["reviewers"]) == reviewers
+    sources = sorted((ROOT / PLUGIN).glob("*.ts"))
     assert {path.name for path in sources} >= {"index.ts", "isolate.ts"}
     for source in sources:
         assert (plugin / source.name).read_bytes() == source.read_bytes()
-        key = f"bundle/adapters/opencode/goldfish_isolation/{source.name}"
+        key = f"bundle/{PLUGIN}/{source.name}"
         assert identity["sha256"][key] == hashlib.sha256(source.read_bytes()).hexdigest()
 
 
@@ -278,14 +291,16 @@ def test_v1_install_adds_isolation_plugin(tmp_path: Path) -> None:
     destination = tmp_path / "candidate"
     config = json.loads(ADAPTER["install"](destination).read_text())
     identity = json.loads((destination / "installation.json").read_text())
-    plugin = destination / "bundle/adapters/opencode/goldfish_isolation"
-    reviewers = sorted(set(config["agent"]) - {"egm"})
-    assert len(reviewers) == 8
-    assert config["plugin"] == [[str(plugin / "v1.ts"), {"agents": reviewers}]]
+    bundle = destination / "bundle"
+    plugin = bundle / PLUGIN
+    options = expected_plugin_options(bundle)
+    assert len(options["reviewers"]) == 8
+    assert set(options["reviewers"]) == set(config["agent"]) - {"egm"}
+    assert config["plugin"] == [[str(plugin / "v1.ts"), options]]
     assert not {"plugins", "experimental"} & set(config)
-    for source in (ROOT / "adapters/opencode/goldfish_isolation").glob("*.ts"):
+    for source in (ROOT / PLUGIN).glob("*.ts"):
         assert (plugin / source.name).read_bytes() == source.read_bytes()
-        key = f"bundle/adapters/opencode/goldfish_isolation/{source.name}"
+        key = f"bundle/{PLUGIN}/{source.name}"
         assert identity["sha256"][key] == hashlib.sha256(source.read_bytes()).hexdigest()
 
 

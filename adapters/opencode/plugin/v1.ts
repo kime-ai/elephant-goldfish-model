@@ -5,7 +5,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { readFile } from "node:fs/promises"
 import { isAbsolute } from "node:path"
 import { isolation } from "./isolate_v1.ts"
-import { parseAgents } from "./options.ts"
+import { parseReviewers } from "./options.ts"
 
 // OpenCode 1.x adds AGENTS.md, CLAUDE.md, CONTEXT.md, and configured instruction files to every
 // agent's system prompt, and the read tool appends nearby ones to its output. For the agents in
@@ -14,11 +14,11 @@ import { parseAgents } from "./options.ts"
 const read = async (path: string) => (isAbsolute(path) ? readFile(path, "utf8").catch(() => undefined) : undefined)
 
 const server: Plugin = async (_input, options) => {
-  const hooks = isolation(parseAgents(options), read, (line) => console.error(line))
+  const hooks = isolation(parseReviewers(options), read, (line) => console.error(line))
   return {
     "experimental.chat.messages.transform": async (_hook, output) => hooks.messages(output.messages),
     "experimental.chat.system.transform": async (hook, output) => hooks.system(hook.sessionID, output.system),
   }
 }
 
-export default { id: "egm-goldfish-isolation", server }
+export default { id: "egm-guard", server }

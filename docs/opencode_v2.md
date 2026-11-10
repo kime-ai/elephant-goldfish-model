@@ -85,10 +85,13 @@ the bundle.
 V2 adds global and project `AGENTS.md` files to every agent's instructions,
 including subagents, and has no per-agent setting to skip them. Reading a file
 also loads any nested `AGENTS.md` between that file and the workspace. The
-installer adds the `egm-goldfish-isolation` server plugin from
-`bundle/adapters/opencode/goldfish_isolation/` (its `index.ts` entry), with the
-eight reviewer names as its `agents` option. Its `context` and `compaction` hooks change only the
-outgoing request for those agents:
+installer adds the `egm-guard` server plugin from `bundle/adapters/opencode/plugin/`
+(its `index.ts` entry). Its options are `primary`, `bundle`, and `reviewers`, which maps each
+reviewer's agent ID to its persona path; the plugin reads only the IDs. The `egm-guard` ID and
+these options are the installer contract proposed on
+[#282](https://github.com/google/elephant-goldfish-model/issues/282), so a fuller guard can
+replace this plugin without installer changes. Its `context` and `compaction` hooks change only
+the outgoing request for the reviewers:
 
 - The `core/instructions` source is removed from the instructions system part,
   which V2 lists in `metadata.experimental.instructions`. A system part without
@@ -102,10 +105,10 @@ outgoing request for those agents:
 Only those line markers count. A task or persona that discusses `AGENTS.md`
 in prose is kept, and assistant and tool messages are never removed.
 
-The plugin refuses to load without a non-empty `agents` list, so a
+The plugin refuses to load without a non-empty `reviewers` map, so a
 misconfigured install fails in the server log instead of running unisolated.
 The reviewer read rules block direct reads of `AGENTS.md`. The plugin logs
-`[egm-goldfish-isolation] <agent>: removed N AGENTS.md block(s)` to the server
+`[egm-guard] <agent>: removed N AGENTS.md block(s)` to the server
 log when it acts. It depends on an experimental field and on V2's instruction
 wording, so verify it after upgrading OpenCode. It also removes files loaded
 through the `instructions` setting. `glob` still shows that an `AGENTS.md`
