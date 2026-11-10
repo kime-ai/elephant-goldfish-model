@@ -2,8 +2,9 @@
 
 # OpenCode V2 integration (experimental)
 
-This adapter targets OpenCode **2.2.5** with the native V2 `agents`,
-`permissions`, `commands`, and `subagent` interfaces. For OpenCode 1.x, use the
+This adapter targets OpenCode 2.x with the native V2 `agents`,
+`permissions`, `commands`, and `subagent` interfaces. It is verified on **2.2.5**;
+see [Host versions](opencode.md#host-versions) for other 2.x releases. For OpenCode 1.x, use the
 [V1 integration](opencode.md). Installation checks do not establish workflow or
 isolation support; the verification steps in the V1 guide still apply.
 
@@ -136,10 +137,10 @@ nested `AGENTS.md` reaches the reviewer. V2 offers reviewers the `skill` tool de
 `*` deny and refuses the call; the probe requires exactly `read`, `glob`, and `skill`.
 
 ```sh
-npm install --prefix /absolute/opencode-v2 @opencode/cli-linux-x64@2.2.5
+npm ci --ignore-scripts --prefix tests/integration/opencode-ci
 python tests/integration/opencode_native_probe.py --host v2 \
   --source . \
-  --opencode /absolute/opencode-v2/node_modules/@opencode/cli-linux-x64/bin/opencode \
+  --opencode tests/integration/opencode-ci/node_modules/@opencode/cli-linux-x64/bin/opencode \
   --output /tmp/egm-opencode-v2-probe
 ```
 

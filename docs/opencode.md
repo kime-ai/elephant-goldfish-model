@@ -2,7 +2,8 @@
 
 # OpenCode V1 integration (experimental)
 
-This adapter targets OpenCode CLI **1.18.29**, with V1 `task` and `permission` interfaces.
+This adapter targets OpenCode CLI 1.x, with V1 `task` and `permission` interfaces.
+It is verified on **1.18.29**; see [Host versions](#host-versions) for other 1.x releases.
 It does not target V2 `subagent` or `permissions` interfaces; for OpenCode 2.x, see the [V2 integration](opencode_v2.md).
 Installation checks do not establish workflow or isolation support.
 Maintainer approval, live workflows, and isolation verification remain pending under [#146](https://github.com/google/elephant-goldfish-model/issues/146).
@@ -21,7 +22,7 @@ python3 adapters/opencode/install.py /absolute/egm-opencode-candidate
 opencode --version
 ```
 
-Require version `1.18.29` before launch. Install that exact version if necessary:
+Use the verified release unless the native probe has passed on yours. To install it:
 
 ```sh
 npm install --prefix /absolute/opencode-v1 opencode-ai@1.18.29
@@ -29,7 +30,8 @@ npm install --prefix /absolute/opencode-v1 opencode-ai@1.18.29
 ```
 
 Inspect the generated `opencode.json` and `installation.json` before use.
-The latter records package identity and SHA-256 hashes of all bundled files.
+The latter records package identity, the verified host release as `host_version`, and SHA-256
+hashes of all bundled files.
 The native configuration contains seven commands, eight reviewers, the `egm` primary agent,
 and the `egm-goldfish-isolation` plugin described under [Instruction isolation](#instruction-isolation).
 Native skill aliases use the canonical frontmatter names and link to the unchanged skill directories.
@@ -173,8 +175,7 @@ It checks native child dispatch, one parent marker, and denial of a synthetic
 `.env` read. It also checks that a project `AGENTS.md` reaches the orchestrator but not the
 reviewer, and that a nested `AGENTS.md` loaded by a reviewer read is removed while the file's
 content arrives. `--host v2` runs the same checks against the
-[V2 adapter](opencode_v2.md#native-probe). The probe accepts any release of the adapter's major
-version and records the one it ran. The pinned Linux x64 executables are in
+[V2 adapter](opencode_v2.md#native-probe). The pinned Linux x64 executables are in
 `tests/integration/opencode-ci`:
 
 ```sh
@@ -231,6 +232,23 @@ This does not verify every required path unless the caller supplies it. It does
 not prove whole-file coverage, transcript authenticity, context isolation, or
 that a running workflow stopped on missing evidence. Do not treat a parent
 summary or an absent marker as sufficient isolation evidence.
+
+## Host versions
+
+Each adapter records one verified host release: the newest release the native probe passed
+on. It is `verified` in `adapters/opencode/install.py`, `host_version` in `installation.json`,
+and the pinned package in `tests/integration/opencode-ci`; a unit test keeps the three equal.
+The probe accepts any release of the adapter's major version and records the one it ran.
+
+The isolation plugins depend on experimental hooks and on how OpenCode renders instructions,
+and either can change in a minor or patch release. A matching major version is therefore not
+evidence of support. The `OpenCode native probe` workflow runs the probe on the verified release
+and on the newest release of each major version, on pull requests, on pushes to `main`, and
+weekly. The verified jobs gate changes. A failing newest-release job is reported without
+blocking unrelated work; treat it as a reason not to upgrade until it is fixed.
+
+To move the verified release, run the probe on the new release, then update all three places
+in one change and record the probe summary in the pull request.
 
 ## Interface sources
 
