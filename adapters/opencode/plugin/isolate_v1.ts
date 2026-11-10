@@ -8,6 +8,9 @@
 const HEADER = /^Instructions from: (.+)$/m
 const REMINDER_END = "\n</system-reminder>"
 
+import { readFile } from "node:fs/promises"
+import { isAbsolute } from "node:path"
+
 // The subset of @opencode-ai/plugin's message types this module reads, so it runs without the host.
 type Completed = {
   readonly status: "completed"
@@ -22,10 +25,17 @@ export type Entry<P extends Part = Part> = {
   parts: P[]
 }
 export type Read = (path: string) => Promise<string | undefined>
+
+// OpenCode decodes the file without a leading byte order mark, so the rendered block has none.
+const BOM = /^\uFEFF/
+
+/** An instruction file's text, or undefined when the path is relative or the file is unreadable. */
+export const readAbsolute: Read = async (path) =>
+  isAbsolute(path) ? readFile(path, "utf8").then((text) => text.replace(BOM, ""), () => undefined) : undefined
 export type Log = (line: string) => void
 
 const refuse = (reason: string): never => {
-  throw new Error(`egm-goldfish-isolation: ${reason}; refusing the request`)
+  throw new Error(`egm-guard: ${reason}; refusing the request`)
 }
 const unverifiable = (path: string) => refuse(`cannot remove the instructions from ${path}`)
 
@@ -128,7 +138,7 @@ export const isolation = (agents: ReadonlySet<string>, read: Read, log: Log) => 
       }
       if (!agents.has(agent)) return
       const removed = await withoutAmbient(system, read)
-      if (removed > 0) log(`[egm-goldfish-isolation] ${agent}: removed ${removed} instruction block(s)`)
+      if (removed > 0) log(`[egm-guard] ${agent}: removed ${removed} instruction block(s)`)
     },
   }
 }
