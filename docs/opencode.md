@@ -141,6 +141,11 @@ come first and pass unchanged.
 Changes apply only to the outgoing request; stored history keeps the read output. The `egm`
 agent keeps its instructions.
 
+OpenCode renders an instruction file without a leading byte order mark, so the plugin drops one
+before it compares. Windows editors write one. Other encodings and endings need no handling:
+a project `AGENTS.md` with CRLF line endings, non-ASCII text, invalid UTF-8, a very large file,
+no final newline, extra blank lines, or a symlink matched on 1.18.29.
+
 The plugin fails closed. If it cannot verify a block, such as a remote `instructions` URL or a
 file that changed during the request, it throws. OpenCode then ends the reviewer task with
 `egm-guard: cannot remove the instructions from <path>; refusing the request`

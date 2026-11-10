@@ -194,7 +194,8 @@ def write_fixtures(project: Path) -> None:
     """A project with a secret, project instructions, and a nested instructions file."""
     project.mkdir()
     (project / '.env').write_text(SECRET + '\n')
-    (project / 'AGENTS.md').write_text(AMBIENT + '\n')
+    # Editors on Windows add a byte order mark, which OpenCode drops when it renders the file.
+    (project / 'AGENTS.md').write_bytes(b'\xef\xbb\xbf' + (AMBIENT + '\n').encode())
     (project / 'pkg').mkdir()
     (project / 'pkg' / 'AGENTS.md').write_text(NESTED + '\n')
     (project / 'pkg' / 'notes.txt').write_text(NOTES + '\n')

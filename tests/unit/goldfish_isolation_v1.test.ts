@@ -160,6 +160,25 @@ describe("readAbsolute", () => {
     expect(await readAbsolute(join(directory, "AGENTS.md"))).toBe("AMBIENT\n")
   })
 
+  test("drops a byte order mark, as OpenCode does when it renders the file", async () => {
+    writeFileSync(join(directory, "bom.md"), "\uFEFFAMBIENT\n")
+    expect(await readAbsolute(join(directory, "bom.md"))).toBe("AMBIENT\n")
+  })
+
+  test("drops only a leading byte order mark", async () => {
+    writeFileSync(join(directory, "inner-bom.md"), "AMB\uFEFFIENT\n")
+    expect(await readAbsolute(join(directory, "inner-bom.md"))).toBe("AMB\uFEFFIENT\n")
+  })
+
+  test.each([
+    { name: "CRLF line endings", text: "AMBIENT\r\nsecond\r\n" },
+    { name: "non-ASCII text", text: "AMBIENT ünïcödé 日本語\n" },
+    { name: "no final newline", text: "AMBIENT" },
+  ])("reads $name unchanged", async ({ text }) => {
+    writeFileSync(join(directory, "other.md"), text)
+    expect(await readAbsolute(join(directory, "other.md"))).toBe(text)
+  })
+
   test.each([{ path: "AGENTS.md" }, { path: "./AGENTS.md" }, { path: "../AGENTS.md" }])(
     "does not read the relative path $path",
     async ({ path }) => {
