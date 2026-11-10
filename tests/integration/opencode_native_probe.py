@@ -34,8 +34,8 @@ Call = tuple[str, dict[str, str]]
 
 
 @dataclass(frozen=True)
-class Host:
-    """How one OpenCode major version installs, runs, and reports the probe."""
+class Interface:
+    """How one OpenCode configuration interface installs, runs, and reports the probe."""
 
     major: int
     install_args: tuple[str, ...]
@@ -53,8 +53,8 @@ class Host:
     sessions: Callable[[dict[str, Any]], tuple[str, str]]
 
 
-HOSTS = {
-    'v1': Host(
+INTERFACES = {
+    'v1': Interface(
         major=1,
         install_args=(),
         run_args=('--agent', 'egm'),
@@ -81,9 +81,9 @@ HOSTS = {
             event['part']['state']['metadata']['parentSessionId'],
         ),
     ),
-    'v2': Host(
+    'v2': Interface(
         major=2,
-        install_args=('--host', 'v2'),
+        install_args=('--interface', 'v2'),
         # The shared V2 background service does not read OPENCODE_CONFIG.
         run_args=('--standalone', '--agent', 'egm'),
         delegate=('subagent', {
@@ -198,22 +198,22 @@ def write_fixtures(project: Path) -> None:
     (project / 'pkg' / 'notes.txt').write_text(NOTES + '\n')
 
 
-def configure(host: Host, source: Path, install: Path, url: str) -> dict[str, Any]:
+def configure(interface: Interface, source: Path, install: Path, url: str) -> dict[str, Any]:
     """Install the adapter and point its configuration at the scripted model."""
     subprocess.run(
-        ['python3', str(source / 'adapters/opencode/install.py'), *host.install_args, str(install)],
+        ['python3', str(source / 'adapters/opencode/install.py'), *interface.install_args, str(install)],
         check=True,
         stdout=subprocess.DEVNULL,
         timeout=60,
     )
     config = json.loads((install / 'opencode.json').read_text())
-    config |= host.provider(url)
+    config |= interface.provider(url)
     config['model'] = 'fixture/fixture'
     return config
 
 
 def run_opencode(
-    binary: Path, host: Host, project: Path, home: Path, config: Path, output: Path,
+    binary: Path, interface: Interface, project: Path, home: Path, config: Path, output: Path,
 ) -> list[dict[str, Any]]:
     """Run one orchestrator turn in an isolated home and return its JSON events."""
     env = {
@@ -227,7 +227,7 @@ def run_opencode(
     }
     result = subprocess.run(
         [
-            str(binary), 'run', *host.run_args, '--format', 'json', '--model', 'fixture/fixture',
+            str(binary), 'run', *interface.run_args, '--format', 'json', '--model', 'fixture/fixture',
             f'Parent-only marker: {MARKER}. Delegate without it.',
         ],
         cwd=project,
@@ -242,25 +242,25 @@ def run_opencode(
     return [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
 
 
-def check_delegation(host: Host, trace: list[dict[str, Any]]) -> tuple[dict[str, Any], str, str]:
+def check_delegation(interface: Interface, trace: list[dict[str, Any]]) -> tuple[dict[str, Any], str, str]:
     """The single completed delegation: its state and its child and parent sessions."""
     tasks = [
         e for e in trace
-        if e.get('type') == 'tool_use' and e['part'].get('tool') == host.delegate[0]
+        if e.get('type') == 'tool_use' and e['part'].get('tool') == interface.delegate[0]
     ]
     assert (
         len(tasks) == 1 and tasks[0]['part']['state']['status'] == 'completed'
     ), 'No completed native task'
     task = tasks[0]['part']['state']
     assert MARKER not in json.dumps(task['input']), 'Parent marker passed to child'
-    child, parent = host.sessions(tasks[0])
+    child, parent = interface.sessions(tasks[0])
     assert child != parent, 'Child reused parent session'
     return task, child, parent
 
 
-def check_requests(host: Host, task: dict[str, Any]) -> list[dict[str, Any]]:
+def check_requests(interface: Interface, task: dict[str, Any]) -> list[dict[str, Any]]:
     """Check what the scripted model received; return the reviewer's requests."""
-    delegate = host.delegate[0]
+    delegate = interface.delegate[0]
     parents = [r for r in REQUESTS if delegate in tool_names(r)]
     assert any(MARKER in json.dumps(r) for r in parents), 'Parent marker did not reach provider'
     assert all(
@@ -273,7 +273,7 @@ def check_requests(host: Host, task: dict[str, Any]) -> list[dict[str, Any]]:
     ), 'Child request does not match task prompt'
     assert all(MARKER not in json.dumps(r) for r in children), 'Parent marker reached child'
     assert all(
-        tool_names(r) == host.child_tools for r in children
+        tool_names(r) == interface.child_tools for r in children
     ), f'Unexpected child tools: {[sorted(tool_names(r)) for r in children]}'
     return children
 
@@ -289,10 +289,10 @@ def tool_results(children: list[dict[str, Any]]) -> list[str]:
     return results
 
 
-def check_isolation(host: Host, children: list[dict[str, Any]], results: list[str]) -> None:
+def check_isolation(interface: Interface, children: list[dict[str, Any]], results: list[str]) -> None:
     assert all(SECRET not in r for r in results), 'Synthetic secret reached child'
     assert any(NOTES in r for r in results), 'Nested fixture read did not reach child'
-    for denial in host.denials:
+    for denial in interface.denials:
         assert any(denial in r for r in results), f'No native denial result: {denial}'
     assert all(AMBIENT not in json.dumps(r) for r in children), 'Project instructions reached child'
     assert all(NESTED not in json.dumps(r) for r in children), 'Nested instructions reached child'
@@ -307,12 +307,12 @@ def main() -> None:
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--opencode', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--host', choices=tuple(HOSTS), default='v1')
+    parser.add_argument('--interface', choices=tuple(INTERFACES), default='v1')
     args = parser.parse_args()
-    host = HOSTS[args.host]
+    interface = INTERFACES[args.interface]
     source, binary = args.source.resolve(), args.opencode.resolve()
     version = parse_version(
-        subprocess.check_output([str(binary), '--version'], text=True), host.major
+        subprocess.check_output([str(binary), '--version'], text=True), interface.major
     )
     sha = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
     status = subprocess.check_output(
@@ -331,22 +331,22 @@ def main() -> None:
             project, home = root / 'project', root / 'home'
             write_fixtures(project)
             home.mkdir()
-            MockProvider.delegate = host.delegate
-            MockProvider.child_calls = host.child_calls(project)
+            MockProvider.delegate = interface.delegate
+            MockProvider.child_calls = interface.child_calls(project)
             config = configure(
-                host, source, root / 'install', f'http://127.0.0.1:{server.server_port}/v1',
+                interface, source, root / 'install', f'http://127.0.0.1:{server.server_port}/v1',
             )
             config_path = root / 'config.json'
             config_path.write_text(json.dumps(config))
-            trace = run_opencode(binary, host, project, home, config_path, args.output)
-            task, child, parent = check_delegation(host, trace)
-            children = check_requests(host, task)
+            trace = run_opencode(binary, interface, project, home, config_path, args.output)
+            task, child, parent = check_delegation(interface, trace)
+            children = check_requests(interface, task)
             results = tool_results(children)
             observations = {
                 'parent_marker_seen_in_parent': True,
                 'native_task_input': task['input'],
                 'native_task_sessions': {'child': child, 'parent': parent},
-                'child_tools': sorted(host.child_tools),
+                'child_tools': sorted(interface.child_tools),
                 'child_marker_present': present(MARKER, children),
                 'child_project_instructions_present': present(AMBIENT, children),
                 'child_nested_instructions_present': present(NESTED, children),
@@ -355,14 +355,14 @@ def main() -> None:
             (args.output / 'child-observations.json').write_text(
                 json.dumps(observations, indent=2) + '\n'
             )
-            check_isolation(host, children, results)
+            check_isolation(interface, children, results)
             summary = {
                 'head': sha,
-                'host': args.host,
+                'interface': args.interface,
                 'opencode_version': version,
                 'model': 'scripted local mock',
                 'native_child_completed': True,
-                'child_tools': sorted(host.child_tools),
+                'child_tools': sorted(interface.child_tools),
                 'parent_marker_seen_in_parent': True,
                 'parent_marker_in_child': False,
                 'fixture_env_read': 'denied',

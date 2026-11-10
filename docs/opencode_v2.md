@@ -17,7 +17,7 @@ and refuses an existing destination.
 
 ```sh
 git rev-parse HEAD
-python3 adapters/opencode/install.py --host v2 /absolute/egm-opencode-v2
+python3 adapters/opencode/install.py --interface v2 /absolute/egm-opencode-v2
 opencode --version
 ```
 
@@ -130,7 +130,7 @@ installed. The same directory holds the V1 entry, `v1.ts`; see the
 
 ## Native probe
 
-`tests/integration/opencode_native_probe.py --host v2` installs this adapter and runs
+`tests/integration/opencode_native_probe.py --interface v2` installs this adapter and runs
 `opencode run --standalone` against a scripted local model. It checks native `subagent`
 dispatch, that a parent-only marker stays out of the reviewer, that the reviewer's `.env` read
 and `skill` call are denied, and that a project `AGENTS.md` reaches `egm` but neither it nor a
@@ -139,7 +139,7 @@ nested `AGENTS.md` reaches the reviewer. V2 offers reviewers the `skill` tool de
 
 ```sh
 npm ci --ignore-scripts --prefix tests/integration/opencode-ci
-python tests/integration/opencode_native_probe.py --host v2 \
+python tests/integration/opencode_native_probe.py --interface v2 \
   --source . \
   --opencode tests/integration/opencode-ci/node_modules/@opencode/cli-linux-x64/bin/opencode \
   --output /tmp/egm-opencode-v2-probe

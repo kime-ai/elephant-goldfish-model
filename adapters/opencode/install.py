@@ -35,11 +35,11 @@ def name(path: Path) -> str:
     return match[1]
 
 
-def install(destination: Path, host: str = "v1") -> Path:
+def install(destination: Path, interface: str = "v1") -> Path:
     """Create a new installation; refuse to overwrite any existing path."""
-    if host not in HOSTS:
-        raise ValueError(f"Unknown OpenCode host: {host}")
-    target = HOSTS[host]
+    if interface not in INTERFACES:
+        raise ValueError(f"Unknown OpenCode interface: {interface}")
+    target = INTERFACES[interface]
     destination = checked_destination(destination)
     destination.mkdir(parents=True)
     bundle = copy_bundle(destination / "bundle", target.extras)
@@ -81,7 +81,7 @@ def checked_destination(destination: Path) -> Path:
 
 
 def copy_bundle(bundle: Path, extras: tuple[Path, ...]) -> Path:
-    """Copy the canonical resources, plus host-specific trees, into a new bundle."""
+    """Copy the canonical resources, plus interface-specific trees, into a new bundle."""
     bundle.mkdir()
     for directory in ("skills", "agents", "resources", "docs", *extras):
         shutil.copytree(ROOT / directory, bundle / directory)
@@ -106,7 +106,7 @@ def link_skills(bundle: Path, skills: Path, context: str) -> dict:
 
 
 def write_identity(destination: Path, bundle: Path, host_version: str) -> None:
-    """Record the plugin identity, target host, and a digest of every bundled file."""
+    """Record the plugin identity, target OpenCode release, and a digest of every bundled file."""
     metadata = json.loads((bundle / "plugin.json").read_text(encoding="utf-8"))
     (destination / "installation.json").write_text(json.dumps({
         "name": metadata["name"], "version": metadata["version"],
@@ -190,9 +190,9 @@ def v1_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
     }
 
 
-def instruction_patterns(host: str) -> list[str]:
-    """Read patterns for the host's instruction files, at the root and in any directory."""
-    return [pattern for filename in INSTRUCTION_FILES[host] for pattern in (filename, f"*/{filename}")]
+def instruction_patterns(interface: str) -> list[str]:
+    """Read patterns for the interface's instruction files, at the root and in any directory."""
+    return [pattern for filename in INSTRUCTION_FILES[interface] for pattern in (filename, f"*/{filename}")]
 
 
 def rule(action: str, resource: str, effect: str) -> dict:
@@ -273,8 +273,8 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
 
 
 @dataclass(frozen=True)
-class Host:
-    """What one OpenCode major version needs from the installer."""
+class Interface:
+    """What one OpenCode configuration interface needs from the installer."""
 
     # The newest host release the scripted native probe passed on. This is not a support claim:
     # support needs the installation, workflow, and isolation checks in docs/opencode.md.
@@ -284,15 +284,17 @@ class Host:
     extras: tuple[Path, ...] = ()
 
 
-HOSTS = {
-    "v1": Host("1.18.29", "docs/opencode.md", v1_config, (ISOLATION_PLUGIN,)),
-    "v2": Host("2.2.5", "docs/opencode_v2.md", v2_config, (ISOLATION_PLUGIN,)),
+INTERFACES = {
+    "v1": Interface("1.18.29", "docs/opencode.md", v1_config, (ISOLATION_PLUGIN,)),
+    "v2": Interface("2.2.5", "docs/opencode_v2.md", v2_config, (ISOLATION_PLUGIN,)),
 }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("destination", type=Path, help="New, fixed installation directory")
-    parser.add_argument("--host", choices=tuple(HOSTS), default="v1", help="OpenCode major version")
+    parser.add_argument(
+        "--interface", choices=tuple(INTERFACES), default="v1", help="OpenCode configuration interface",
+    )
     args = parser.parse_args()
-    print(install(args.destination, args.host))
+    print(install(args.destination, args.interface))

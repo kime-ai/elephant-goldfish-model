@@ -175,7 +175,7 @@ The scoped OpenCode native probe uses a scripted local model, not a live model.
 It checks native child dispatch, one parent marker, and denial of a synthetic
 `.env` read. It also checks that a project `AGENTS.md` reaches the orchestrator but not the
 reviewer, and that a nested `AGENTS.md` loaded by a reviewer read is removed while the file's
-content arrives. `--host v2` runs the same checks against the
+content arrives. `--interface v2` runs the same checks against the
 [V2 adapter](opencode_v2.md#native-probe). The pinned Linux x64 executables are in
 `tests/integration/opencode-ci`:
 

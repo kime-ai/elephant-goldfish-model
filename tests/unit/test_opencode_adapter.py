@@ -202,8 +202,8 @@ def test_env_matching_destination_is_rejected(tmp_path: Path, suffix: str) -> No
     assert not list(tmp_path.iterdir())
 
 
-def test_unknown_host_is_rejected(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="Unknown OpenCode host"):
+def test_unknown_interface_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Unknown OpenCode interface"):
         ADAPTER["install"](tmp_path / "candidate", "v3")
     assert not list(tmp_path.iterdir())
 
