@@ -56,7 +56,7 @@ def install(destination: Path, host: str = "v1") -> Path:
     config.write_text(json.dumps(
         target.build(bundle, skills, context, commands), indent=2,
     ) + "\n", encoding="utf-8")
-    write_identity(destination, bundle, target.verified)
+    write_identity(destination, bundle, target.probed)
     return config
 
 
@@ -276,9 +276,9 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
 class Host:
     """What one OpenCode major version needs from the installer."""
 
-    # The newest host release the native probe passed on. Other releases of the same major
-    # version are unverified until the probe passes on them; see docs/opencode.md.
-    verified: str
+    # The newest host release the scripted native probe passed on. This is not a support claim:
+    # support needs the installation, workflow, and isolation checks in docs/opencode.md.
+    probed: str
     guide: str
     build: Callable[[Path, Path, str, dict], dict]
     extras: tuple[Path, ...] = ()

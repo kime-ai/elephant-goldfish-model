@@ -60,10 +60,10 @@ def test_gating_workflow_probes_every_host_at_its_pinned_version() -> None:
     assert "schedule" not in workflow("opencode-native")[True]
 
 
-def test_pinned_executables_are_the_verified_host_versions() -> None:
+def test_pinned_executables_are_the_probed_host_versions() -> None:
     pins = json.loads((ROOT / "tests/integration/opencode-ci/package.json").read_text())["dependencies"]
-    verified = {name: host.verified for name, host in INSTALLER["HOSTS"].items()}
-    assert {name: pins[item["package"]] for name, item in hosts("opencode-native").items()} == verified
+    probed = {name: host.probed for name, host in INSTALLER["HOSTS"].items()}
+    assert {name: pins[item["package"]] for name, item in hosts("opencode-native").items()} == probed
 
 
 def test_pinned_binary_paths_lie_inside_their_packages() -> None:
