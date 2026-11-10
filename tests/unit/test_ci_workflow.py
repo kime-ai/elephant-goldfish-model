@@ -31,6 +31,16 @@ def test_ci_waits_for_all_validation_jobs() -> None:
   }
 
 
+def test_unit_job_installs_bun_for_the_isolation_plugin_tests() -> None:
+  # Without Bun, tests/unit/test_goldfish_isolation.py has no plugin to run.
+  steps = workflow()["jobs"]["unit"]["steps"]
+  bun = [step for step in steps if step.get("uses", "").startswith("oven-sh/setup-bun@")]
+  assert len(bun) == 1
+  assert bun[0]["with"]["bun-version"]
+  pytest_index = next(i for i, step in enumerate(steps) if "pytest" in step.get("run", ""))
+  assert steps.index(bun[0]) < pytest_index
+
+
 def test_release_installs_shared_test_group_before_tag_checkout() -> None:
   release = yaml.safe_load(
       (ROOT / ".github/workflows/release.yml").read_text())
