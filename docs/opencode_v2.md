@@ -84,8 +84,8 @@ V2 adds global and project `AGENTS.md` files to every agent's instructions,
 including subagents, and has no per-agent setting to skip them. Reading a file
 also loads any nested `AGENTS.md` between that file and the workspace. The
 installer adds the `egm-goldfish-isolation` server plugin from
-`bundle/adapters/opencode/goldfish_isolation/`, with the eight reviewer names as
-its `agents` option. Its `context` and `compaction` hooks change only the
+`bundle/adapters/opencode/goldfish_isolation/` (its `index.ts` entry), with the
+eight reviewer names as its `agents` option. Its `context` and `compaction` hooks change only the
 outgoing request for those agents:
 
 - The `core/instructions` source is removed from the instructions system part,
@@ -112,7 +112,8 @@ by the read rules.
 
 The plugin's tests in `tests/unit/goldfish_isolation.test.ts` run under Bun;
 `tests/unit/test_goldfish_isolation.py` runs them and skips when Bun is not
-installed.
+installed. The same directory holds the V1 entry, `v1.ts`; see the
+[V1 guide](opencode.md#instruction-isolation).
 
 ## Differences from V1
 

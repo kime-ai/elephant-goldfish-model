@@ -17,6 +17,7 @@ ISOLATION_PLUGIN = Path("adapters/opencode/goldfish_isolation")
 # Instruction files the host injects into every agent. Goldfish reviewers must not read them;
 # each name is matched at the worktree root and in any directory, never as a suffix.
 INSTRUCTION_FILES = {
+    "v1": ("AGENTS.md", "agents.md", "CLAUDE.md", "claude.md", "CONTEXT.md", "context.md"),
     "v2": ("AGENTS.md", "agents.md"),
 }
 REVIEWERS = (
@@ -152,6 +153,7 @@ def v1_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
                 "read": {
                     "*": "allow", "*.env": "deny", "*.env.*": "deny",
                     "*.env.example": "allow", "mcp:*": "deny",
+                    **{pattern: "deny" for pattern in instruction_patterns("v1")},
                 },
                 # grep does not enforce read rules, so it could expose .env files.
                 "glob": "allow", "grep": "deny",
@@ -182,6 +184,7 @@ def v1_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
         "autoupdate": False,
         "default_agent": "egm",
         "skills": {"paths": [str(skills)]},
+        "plugin": [[str(bundle / ISOLATION_PLUGIN / "v1.ts"), {"agents": sorted(set(agents) - {"egm"})}]],
         "agent": agents,
         "command": commands,
     }
@@ -280,7 +283,7 @@ class Host:
 
 
 HOSTS = {
-    "v1": Host("1.18.29", "docs/opencode.md", v1_config),
+    "v1": Host("1.18.29", "docs/opencode.md", v1_config, (ISOLATION_PLUGIN,)),
     "v2": Host("2.2.5", "docs/opencode_v2.md", v2_config, (ISOLATION_PLUGIN,)),
 }
 
