@@ -3,14 +3,18 @@
 
 // Run through tests/unit/test_goldfish_isolation.py, or directly with `bun test`.
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import {
   isolation,
+  readAbsolute,
   requester,
   withoutAmbient,
   withoutNested,
   type Entry,
   type Part,
-} from "../../adapters/opencode/goldfish_isolation/isolate_v1.ts"
+} from "../../adapters/opencode/plugin/isolate_v1.ts"
 
 const REVIEWERS = new Set(["egm-structural"])
 
@@ -144,7 +148,53 @@ describe("withoutAmbient", () => {
     { name: "a longer block", text: "Instructions from: /p/AGENTS.md\nAMBIENT MORE", contents: { "/p/AGENTS.md": "AMBIENT" } },
   ])("refuses $name", async ({ text, contents }) => {
     const system = [`${HEAD}\n${text}`]
-    await expect(withoutAmbient(system, files(contents))).rejects.toThrow(/egm-goldfish-isolation/)
+    await expect(withoutAmbient(system, files(contents))).rejects.toThrow(/egm-guard/)
+  })
+})
+
+describe("readAbsolute", () => {
+  const directory = mkdtempSync(join(tmpdir(), "egm-guard-v1-"))
+  writeFileSync(join(directory, "AGENTS.md"), "AMBIENT\n")
+
+  test("reads a file by its absolute path", async () => {
+    expect(await readAbsolute(join(directory, "AGENTS.md"))).toBe("AMBIENT\n")
+  })
+
+  test("drops a byte order mark, as OpenCode does when it renders the file", async () => {
+    writeFileSync(join(directory, "bom.md"), "\uFEFFAMBIENT\n")
+    expect(await readAbsolute(join(directory, "bom.md"))).toBe("AMBIENT\n")
+  })
+
+  test("drops only a leading byte order mark", async () => {
+    writeFileSync(join(directory, "inner-bom.md"), "AMB\uFEFFIENT\n")
+    expect(await readAbsolute(join(directory, "inner-bom.md"))).toBe("AMB\uFEFFIENT\n")
+  })
+
+  test.each([
+    { name: "CRLF line endings", text: "AMBIENT\r\nsecond\r\n" },
+    { name: "non-ASCII text", text: "AMBIENT ünïcödé 日本語\n" },
+    { name: "no final newline", text: "AMBIENT" },
+  ])("reads $name unchanged", async ({ text }) => {
+    writeFileSync(join(directory, "other.md"), text)
+    expect(await readAbsolute(join(directory, "other.md"))).toBe(text)
+  })
+
+  test.each([{ path: "AGENTS.md" }, { path: "./AGENTS.md" }, { path: "../AGENTS.md" }])(
+    "does not read the relative path $path",
+    async ({ path }) => {
+      // A file this path would reach if it were resolved against the working directory.
+      const original = process.cwd()
+      process.chdir(directory)
+      try {
+        expect(await readAbsolute(path)).toBeUndefined()
+      } finally {
+        process.chdir(original)
+      }
+    },
+  )
+
+  test("returns nothing for a missing file", async () => {
+    expect(await readAbsolute(join(directory, "missing.md"))).toBeUndefined()
   })
 })
 
@@ -165,7 +215,7 @@ describe("isolation", () => {
     await hooks.system("child", system)
     expect(outputs(transcript)).toEqual([undefined, CONTENT])
     expect(system).toEqual([HEAD])
-    expect(lines).toEqual(["[egm-goldfish-isolation] egm-structural: removed 1 instruction block(s)"])
+    expect(lines).toEqual(["[egm-guard] egm-structural: removed 1 instruction block(s)"])
   })
 
   test("logs nothing when a reviewer request has no instructions", async () => {
@@ -180,7 +230,7 @@ describe("isolation", () => {
     async ({ sessionID }) => {
       const { hooks } = setup()
       hooks.messages([user("egm", "parent")])
-      await expect(hooks.system(sessionID, [prompt])).rejects.toThrow(/^egm-goldfish-isolation: .*agent/)
+      await expect(hooks.system(sessionID, [prompt])).rejects.toThrow(/^egm-guard: .*agent/)
     },
   )
 

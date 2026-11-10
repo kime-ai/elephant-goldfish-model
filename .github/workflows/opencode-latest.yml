@@ -17,17 +17,17 @@ permissions:
 
 jobs:
   native-probe:
-    name: native-probe (${{ matrix.host }}, latest)
+    name: native-probe (${{ matrix.interface }}, latest)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         include:
-          - host: v1
+          - interface: v1
             package: opencode-linux-x64
             major: '1'
-          - host: v2
+          - interface: v2
             package: '@opencode/cli-linux-x64'
             major: '2'
     steps:
@@ -48,12 +48,12 @@ jobs:
         run: npm install --no-save --no-package-lock --ignore-scripts --prefix "$PREFIX" "$PACKAGE@$MAJOR"
       - name: Exercise native child permissions and instruction isolation
         env:
-          HOST: ${{ matrix.host }}
+          INTERFACE: ${{ matrix.interface }}
           OPENCODE: ${{ runner.temp }}/opencode-latest/node_modules/${{ matrix.package }}/bin/opencode
           PROBE_OUTPUT: ${{ runner.temp }}/opencode-native-probe
         run: >-
           python tests/integration/opencode_native_probe.py
-          --host "$HOST"
+          --interface "$INTERFACE"
           --source .
           --opencode "$OPENCODE"
           --output "$PROBE_OUTPUT"

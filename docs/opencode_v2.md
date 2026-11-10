@@ -3,7 +3,7 @@
 # OpenCode V2 integration (experimental)
 
 This adapter targets OpenCode 2.x with the native V2 `agents`,
-`permissions`, `commands`, and `subagent` interfaces. The native probe passes on **2.2.5**;
+`permissions`, `commands`, and `subagent` interfaces. The native probe passes on **2.2.6**;
 that is not a support claim. See [Host versions](opencode.md#host-versions) for what the probe
 covers and for other 2.x releases. For OpenCode 1.x, use the
 [V1 integration](opencode.md). Installation checks do not establish workflow or
@@ -17,7 +17,7 @@ and refuses an existing destination.
 
 ```sh
 git rev-parse HEAD
-python3 adapters/opencode/install.py --host v2 /absolute/egm-opencode-v2
+python3 adapters/opencode/install.py --interface v2 /absolute/egm-opencode-v2
 opencode --version
 ```
 
@@ -82,35 +82,58 @@ the bundle.
 
 ## Instruction isolation
 
-V2 adds global and project `AGENTS.md` files to every agent's instructions,
-including subagents, and has no per-agent setting to skip them. Reading a file
-also loads any nested `AGENTS.md` between that file and the workspace. The
-installer adds the `egm-goldfish-isolation` server plugin from
-`bundle/adapters/opencode/goldfish_isolation/` (its `index.ts` entry), with the
-eight reviewer names as its `agents` option. Its `context` and `compaction` hooks change only the
-outgoing request for those agents:
+V2 adds every instruction source to every agent's request, including subagents,
+and has no per-agent setting to skip them: the global and project `AGENTS.md`
+files, files in the `instructions` setting, and Code Mode, MCP, skill, and
+reference guidance. Reading a file also loads any nested `AGENTS.md` between that
+file and the workspace, as an injected message. V2 also offers every agent the
+`skill` tool, even when its rules deny it.
 
-- The `core/instructions` source is removed from the instructions system part,
-  which V2 lists in `metadata.experimental.instructions`. A system part without
-  a valid source list is dropped if a line starts with `Instructions from:` or
-  `The instructions from` and names an `AGENTS.md` file.
-- User messages that start with `Instructions from: <path>/AGENTS.md`, which is
-  how V2 delivers nested files, are dropped.
-- System messages with such a line, which is how V2 announces instruction
-  changes, are dropped.
+The installer adds the `egm-guard` server plugin from `bundle/adapters/opencode/plugin/`
+(its `index.ts` entry). Its options are `primary`, `bundle`, and `reviewers`, which maps each
+reviewer's agent ID to its persona path; the plugin reads only the IDs. The `egm-guard` ID and
+these options are the installer contract proposed on
+[#282](https://github.com/google/elephant-goldfish-model/issues/282), so a fuller guard can
+replace this plugin without installer changes. Its `context`, `compaction`, and `generate`
+hooks change only the outgoing request for the reviewers, and keep an allowlist:
 
-Only those line markers count. A task or persona that discusses `AGENTS.md`
-in prose is kept, and assistant and tool messages are never removed.
+- **System prompt.** The agent's own prompt, and the `core/date` and `core/environment`
+  sources, which V2 lists in `metadata.experimental.instructions`. Every other source is
+  removed, including kinds that V2 adds later. A system part with no valid source list is
+  removed unless it is the agent's own prompt.
+- **Transcript.** V2's injected messages are removed: `synthetic` messages, which carry nested
+  `AGENTS.md` files and notices, and system messages with text, which announce instruction
+  changes. The reviewer's own user, assistant, and tool messages stay, whatever they say.
+- **Tools.** Only `read` and `glob`. Because `skill` is not offered, a reviewer's attempt to
+  use it is an unavailable tool, not a denied call; the native probe checks the exact toolset.
 
-The plugin refuses to load without a non-empty `agents` list, so a
-misconfigured install fails in the server log instead of running unisolated.
-The reviewer read rules block direct reads of `AGENTS.md`. The plugin logs
-`[egm-goldfish-isolation] <agent>: removed N AGENTS.md block(s)` to the server
-log when it acts. It depends on an experimental field and on V2's instruction
-wording, so verify it after upgrading OpenCode. It also removes files loaded
-through the `instructions` setting. `glob` still shows that an `AGENTS.md`
-exists. Mixed-case names other than `AGENTS.md` and `agents.md` are not covered
-by the read rules.
+Each request fails closed. If a reviewer's request has no copy of its own prompt, which means V2
+changed how it builds requests, the plugin throws, the subagent ends in an error, and no request
+reaches the model. When the plugin removes something, it logs
+`[egm-guard] <agent>: removed N injected item(s)` to the server log.
+
+A plugin that fails to load does not fail closed. V2 2.2.6 logs a warning, `failed to load
+plugin plugin.id=egm-guard`, and runs the reviewer with OpenCode's default instructions: the
+project and nested `AGENTS.md` reach it, and it is offered `skill`. The plugin rejects a missing
+or malformed `reviewers` map, so that is how a bad configuration fails, and no other check
+catches it. A unit test installs both interfaces and passes the generated options to the
+plugin's own parser, so an installer that drifts from the plugin fails the test. After a manual
+edit to the generated configuration, look for that warning in the server log
+(`opencode --standalone --print-logs`). The native probe installs its own copy, so it checks the
+installer's output, not a file edited by hand. Making a missing plugin fatal means making
+reviewer dispatch depend on it, which is part of the guard on #282.
+
+The reviewer read rules also deny direct reads of `AGENTS.md` and `agents.md`. This goes beyond
+the guard proposed on #282, and it blocks a review whose target is an `AGENTS.md` file.
+`glob` still shows that an `AGENTS.md` exists. Mixed-case names other than `AGENTS.md` and
+`agents.md` are not covered by the read rules.
+
+The plugin depends on an experimental field, the `metadata.experimental.instructions` list,
+and on V2 giving `synthetic` messages the ID of the session message they came from. The native
+probe checks both on each probed release; repeat it after upgrading OpenCode.
+
+The plugin does not control reviewer dispatch, required reads, or the permissions of reviewers
+that project configuration or session rules might widen. The design on #282 covers those.
 
 The plugin's tests in `tests/unit/goldfish_isolation.test.ts` run under Bun;
 `tests/unit/test_goldfish_isolation.py` runs them and skips when Bun is not
@@ -130,21 +153,21 @@ installed. The same directory holds the V1 entry, `v1.ts`; see the
 
 ## Native probe
 
-`tests/integration/opencode_native_probe.py --host v2` installs this adapter and runs
+`tests/integration/opencode_native_probe.py --interface v2` installs this adapter and runs
 `opencode run --standalone` against a scripted local model. It checks native `subagent`
 dispatch, that a parent-only marker stays out of the reviewer, that the reviewer's `.env` read
-and `skill` call are denied, and that a project `AGENTS.md` reaches `egm` but neither it nor a
-nested `AGENTS.md` reaches the reviewer. V2 offers reviewers the `skill` tool despite their
-`*` deny and refuses the call; the probe requires exactly `read`, `glob`, and `skill`.
+is denied, and that a project `AGENTS.md` reaches `egm` but neither it nor a nested `AGENTS.md`
+reaches the reviewer. It requires reviewers to be offered exactly `read` and
+`glob`, and checks that they keep their persona prompt and environment.
 
 ```sh
 npm ci --ignore-scripts --prefix tests/integration/opencode-ci
-python tests/integration/opencode_native_probe.py --host v2 \
+python tests/integration/opencode_native_probe.py --interface v2 \
   --source . \
   --opencode tests/integration/opencode-ci/node_modules/@opencode/cli-linux-x64/bin/opencode \
   --output /tmp/egm-opencode-v2-probe
 ```
 
 On another platform, install that platform's package, such as
-`@opencode/cli-darwin-arm64@2.2.5`, and pass its `bin/opencode`. A passing probe does not
+`@opencode/cli-darwin-arm64@2.2.6`, and pass its `bin/opencode`. A passing probe does not
 establish live model behavior, full workflows, or general reviewer isolation.

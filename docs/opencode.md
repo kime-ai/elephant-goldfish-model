@@ -34,7 +34,7 @@ Inspect the generated `opencode.json` and `installation.json` before use.
 The latter records package identity, the probed host release as `host_version`, and SHA-256
 hashes of all bundled files.
 The native configuration contains seven commands, eight reviewers, the `egm` primary agent,
-and the `egm-goldfish-isolation` plugin described under [Instruction isolation](#instruction-isolation).
+and the `egm-guard` plugin described under [Instruction isolation](#instruction-isolation).
 Native skill aliases use the canonical frontmatter names and link to the unchanged skill directories.
 
 Start OpenCode from the project directory with the candidate configuration:
@@ -122,9 +122,10 @@ working directory up to the worktree root, or else every `CLAUDE.md` on that pat
 reads a file, the read tool also appends nearby instruction files to its output in a
 `<system-reminder>` and lists their paths in `metadata.loaded`.
 
-The installer copies `adapters/opencode/goldfish_isolation/` into the bundle and lists its
-`v1.ts` entry under `plugin`, with the eight reviewer names as its `agents` option. For those
-agents it removes every instruction block, not only `AGENTS.md`:
+The installer copies `adapters/opencode/plugin/` into the bundle and lists its `v1.ts` entry
+under `plugin`. Its options are `primary`, `bundle`, and `reviewers`, which maps each reviewer's
+agent ID to its persona path; the plugin reads only the IDs. For those agents it removes every
+instruction block, not only `AGENTS.md`:
 
 - `experimental.chat.messages.transform` records each session's agent from its latest user
   message, and strips the reminder from reviewer sessions' read results.
@@ -140,13 +141,27 @@ come first and pass unchanged.
 Changes apply only to the outgoing request; stored history keeps the read output. The `egm`
 agent keeps its instructions.
 
+OpenCode renders an instruction file without a leading byte order mark, so the plugin drops one
+before it compares. Windows editors write one. Other encodings and endings need no handling:
+a project `AGENTS.md` with CRLF line endings, non-ASCII text, invalid UTF-8, a very large file,
+no final newline, extra blank lines, or a symlink matched on 1.18.29.
+
 The plugin fails closed. If it cannot verify a block, such as a remote `instructions` URL or a
 file that changed during the request, it throws. OpenCode then ends the reviewer task with
-`egm-goldfish-isolation: cannot remove the instructions from <path>; refusing the request`
+`egm-guard: cannot remove the instructions from <path>; refusing the request`
 instead of sending it. A request with instructions from a session it never recorded, which
-would mean OpenCode changed the order above, is refused the same way for every agent. The
-plugin also refuses to load without a non-empty `agents` list. When it acts, it logs
-`[egm-goldfish-isolation] <agent>: removed N instruction block(s)` to stderr.
+would mean OpenCode changed the order above, is refused the same way for every agent. When the
+plugin acts, it logs `[egm-guard] <agent>: removed N instruction block(s)` to stderr.
+
+A plugin that fails to load does not fail closed. OpenCode 1.18.29 logs
+`failed to load plugin` at error level, with the plugin's message, and runs the reviewer with
+OpenCode's default instructions: the project and nested `AGENTS.md` reach it. The plugin rejects
+a missing or malformed `reviewers` map, so that is how a bad configuration fails, and no other
+check catches it. A unit test installs both interfaces and passes the generated options to the
+plugin's own parser, so an installer that drifts from the plugin fails the test. After a manual
+edit to the generated configuration, look for that error in the logs (`opencode --print-logs`).
+The native probe installs its own copy, so it checks the installer's output, not a file edited
+by hand.
 
 It depends on two experimental hooks and on the rendering above, so repeat the native probe
 after upgrading OpenCode. `glob` still shows that an instruction file exists.
@@ -175,7 +190,7 @@ The scoped OpenCode native probe uses a scripted local model, not a live model.
 It checks native child dispatch, one parent marker, and denial of a synthetic
 `.env` read. It also checks that a project `AGENTS.md` reaches the orchestrator but not the
 reviewer, and that a nested `AGENTS.md` loaded by a reviewer read is removed while the file's
-content arrives. `--host v2` runs the same checks against the
+content arrives. `--interface v2` runs the same checks against the
 [V2 adapter](opencode_v2.md#native-probe). The pinned Linux x64 executables are in
 `tests/integration/opencode-ci`:
 
