@@ -249,6 +249,7 @@ def test_v2_install_native_contract(tmp_path: Path) -> None:
     assert allowed == reviewers
     guide = " ".join((bundle / "docs/opencode_v2.md").read_text().split())
     assert "Do not pass parent history, private reasoning, or memory." in guide
+    assert config["experimental"] == {"todo": True}
 
 
 def test_v2_permissions_enforce_reviewer_boundary(tmp_path: Path) -> None:
@@ -281,6 +282,7 @@ def test_v2_permissions_enforce_reviewer_boundary(tmp_path: Path) -> None:
                 ("subagent", "egm-style"), ("opencode_read_mcp_resource", "s:u"), ("execute", "*"),
             ):
                 assert v2_effect(rules, action, resource) == "deny", (name, action)
+        assert v2_effect(rules, "todowrite", "*") == ("deny" if reviewer else "allow")
         if not reviewer:
             assert v2_effect(rules, "question", "*") == "allow"
             assert v2_effect(rules, "edit", "design_draft.md") == "ask"

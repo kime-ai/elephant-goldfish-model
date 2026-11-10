@@ -70,11 +70,13 @@ Reviewers start with `*` deny, then allow `read` (except `.env` files) and
 `glob`, and allow external directories only inside the bundle. The `*` deny
 covers `grep`, whose resource is the search pattern rather than a path, so it
 would bypass the `.env` read rules. It also covers shell, edits, web, MCP tools
-and resources, Code Mode, skills, questions, and delegation.
+and resources, Code Mode, skills, questions, todos, and delegation.
 
 The `egm` agent asks by default, allows reads, `glob`, `grep`, questions for
-approval gates, `egm-*` skills, and the eight reviewers. V2 allows external
-directories by default; this agent restores the V1 prompt except for the bundle.
+approval gates, `todowrite`, `egm-*` skills, and the eight reviewers. The
+configuration sets `experimental.todo` so that `todowrite` exists. V2 allows
+external directories by default; this agent restores the V1 prompt except for
+the bundle.
 
 ## Differences from V1
 

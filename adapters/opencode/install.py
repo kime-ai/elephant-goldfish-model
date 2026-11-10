@@ -225,6 +225,8 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
             rule("grep", "*", "allow"),
             # Approval gates use the question tool.
             rule("question", "*", "allow"),
+            # Requires experimental.todo, set below.
+            rule("todowrite", "*", "allow"),
             rule("skill", "*", "deny"),
             rule("skill", "egm-*", "allow"),
             rule("subagent", "*", "deny"),
@@ -243,6 +245,7 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
         "$schema": "https://opencode.ai/config.json",
         "default_agent": "egm",
         "skills": [str(skills)],
+        "experimental": {"todo": True},
         "agents": agents,
         "commands": commands,
     }
