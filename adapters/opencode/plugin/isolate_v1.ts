@@ -8,6 +8,9 @@
 const HEADER = /^Instructions from: (.+)$/m
 const REMINDER_END = "\n</system-reminder>"
 
+import { readFile } from "node:fs/promises"
+import { isAbsolute } from "node:path"
+
 // The subset of @opencode-ai/plugin's message types this module reads, so it runs without the host.
 type Completed = {
   readonly status: "completed"
@@ -22,6 +25,10 @@ export type Entry<P extends Part = Part> = {
   parts: P[]
 }
 export type Read = (path: string) => Promise<string | undefined>
+
+/** An instruction file's text, or undefined when the path is relative or the file is unreadable. */
+export const readAbsolute: Read = async (path) =>
+  isAbsolute(path) ? readFile(path, "utf8").catch(() => undefined) : undefined
 export type Log = (line: string) => void
 
 const refuse = (reason: string): never => {

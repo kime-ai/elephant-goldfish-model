@@ -3,8 +3,12 @@
 
 // Run through tests/unit/test_goldfish_isolation.py, or directly with `bun test`.
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import {
   isolation,
+  readAbsolute,
   requester,
   withoutAmbient,
   withoutNested,
@@ -145,6 +149,33 @@ describe("withoutAmbient", () => {
   ])("refuses $name", async ({ text, contents }) => {
     const system = [`${HEAD}\n${text}`]
     await expect(withoutAmbient(system, files(contents))).rejects.toThrow(/egm-guard/)
+  })
+})
+
+describe("readAbsolute", () => {
+  const directory = mkdtempSync(join(tmpdir(), "egm-guard-v1-"))
+  writeFileSync(join(directory, "AGENTS.md"), "AMBIENT\n")
+
+  test("reads a file by its absolute path", async () => {
+    expect(await readAbsolute(join(directory, "AGENTS.md"))).toBe("AMBIENT\n")
+  })
+
+  test.each([{ path: "AGENTS.md" }, { path: "./AGENTS.md" }, { path: "../AGENTS.md" }])(
+    "does not read the relative path $path",
+    async ({ path }) => {
+      // A file this path would reach if it were resolved against the working directory.
+      const original = process.cwd()
+      process.chdir(directory)
+      try {
+        expect(await readAbsolute(path)).toBeUndefined()
+      } finally {
+        process.chdir(original)
+      }
+    },
+  )
+
+  test("returns nothing for a missing file", async () => {
+    expect(await readAbsolute(join(directory, "missing.md"))).toBeUndefined()
   })
 })
 
