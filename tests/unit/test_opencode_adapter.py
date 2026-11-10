@@ -14,6 +14,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTER = runpy.run_path(str(ROOT / "adapters/opencode/install.py"))
+V1_INSTRUCTION_RULES = [
+    pattern
+    for filename in ("AGENTS.md", "agents.md", "CLAUDE.md", "claude.md", "CONTEXT.md", "context.md")
+    for pattern in (filename, f"*/{filename}")
+]
 
 
 def test_install_preserves_resources_and_native_contract(tmp_path: Path) -> None:
@@ -58,6 +63,7 @@ def test_install_preserves_resources_and_native_contract(tmp_path: Path) -> None
             "read": {
                 "*": "allow", "*.env": "deny", "*.env.*": "deny",
                 "*.env.example": "allow", "mcp:*": "deny",
+                **{pattern: "deny" for pattern in V1_INSTRUCTION_RULES},
             },
             "glob": "allow", "grep": "deny",
             "external_directory": {"*": "deny", f"{destination / 'bundle'}/**": "allow"},
@@ -66,6 +72,7 @@ def test_install_preserves_resources_and_native_contract(tmp_path: Path) -> None
         assert list(agent["permission"]["read"].items()) == [
             ("*", "allow"), ("*.env", "deny"), ("*.env.*", "deny"),
             ("*.env.example", "allow"), ("mcp:*", "deny"),
+            *((pattern, "deny") for pattern in V1_INSTRUCTION_RULES),
         ]
         assert str(persona) in agent["prompt"]
         assert "Read-Only Protocol" not in agent["prompt"]
@@ -180,6 +187,12 @@ def test_required_reads_pass_env_rules(tmp_path: Path) -> None:
         for path in (".env", "app/.env", ".env.local", "app/.env.production", "prod.env"):
             assert v1_read_effect(rules, path) == secret, (name, path)
         assert v1_read_effect(rules, "app/.env.example") == "allow"
+        # The host injects these instruction files; Goldfish reviewers must not read them.
+        instructions = ("AGENTS.md", "pkg/AGENTS.md", "CLAUDE.md", "pkg/claude.md", "CONTEXT.md", "agents.md")
+        for path in instructions:
+            assert v1_read_effect(rules, path) == ("allow" if name == "egm" else "deny"), (name, path)
+        for path in ("SUBAGENTS.md", "docs/PROJECT_CONTEXT.md"):
+            assert v1_read_effect(rules, path) == "allow", (name, path)
 
 
 @pytest.mark.parametrize("suffix", ["egm.env.candidate", "staging.ENV.d/candidate"])
@@ -261,11 +274,19 @@ def test_v2_install_native_contract(tmp_path: Path) -> None:
         assert identity["sha256"][key] == hashlib.sha256(source.read_bytes()).hexdigest()
 
 
-def test_v1_install_omits_isolation_plugin(tmp_path: Path) -> None:
+def test_v1_install_adds_isolation_plugin(tmp_path: Path) -> None:
     destination = tmp_path / "candidate"
     config = json.loads(ADAPTER["install"](destination).read_text())
+    identity = json.loads((destination / "installation.json").read_text())
+    plugin = destination / "bundle/adapters/opencode/goldfish_isolation"
+    reviewers = sorted(set(config["agent"]) - {"egm"})
+    assert len(reviewers) == 8
+    assert config["plugin"] == [[str(plugin / "v1.ts"), {"agents": reviewers}]]
     assert not {"plugins", "experimental"} & set(config)
-    assert not (destination / "bundle/adapters").exists()
+    for source in (ROOT / "adapters/opencode/goldfish_isolation").glob("*.ts"):
+        assert (plugin / source.name).read_bytes() == source.read_bytes()
+        key = f"bundle/adapters/opencode/goldfish_isolation/{source.name}"
+        assert identity["sha256"][key] == hashlib.sha256(source.read_bytes()).hexdigest()
 
 
 def test_v2_permissions_enforce_reviewer_boundary(tmp_path: Path) -> None:
@@ -301,6 +322,7 @@ def test_v2_permissions_enforce_reviewer_boundary(tmp_path: Path) -> None:
         instructions = ("AGENTS.md", "pkg/AGENTS.md", "/home/u/.config/opencode/AGENTS.md", "agents.md")
         for path in instructions:
             assert v2_effect(rules, "read", path) == ("deny" if reviewer else "allow"), (name, path)
+        assert v2_effect(rules, "read", "SUBAGENTS.md") == "allow", name
         assert v2_effect(rules, "todowrite", "*") == ("deny" if reviewer else "allow")
         if reviewer:
             assert v2_effect(rules, "read", "README.md") == "allow"

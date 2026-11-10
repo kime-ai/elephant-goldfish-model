@@ -19,11 +19,16 @@ from typing import Any
 
 MARKER = 'EGM_PARENT_ONLY_SENTINEL'
 SECRET = 'EGM_SYNTHETIC_SECRET'
+# Project instructions the host injects; Goldfish reviewers must not see them.
+AMBIENT = 'EGM_AMBIENT_INSTRUCTIONS_SENTINEL'
+NESTED = 'EGM_NESTED_INSTRUCTIONS_SENTINEL'
+NOTES = 'EGM_SYNTHETIC_NOTES'
 REQUESTS: list[dict[str, Any]] = []
 
 
 class MockProvider(BaseHTTPRequestHandler):
-    fixture = ''
+    # The child reads these in order, then stops.
+    reads: list[str] = []
 
     def log_message(self, _format: str, *_args: object) -> None:
         pass
@@ -34,9 +39,10 @@ class MockProvider(BaseHTTPRequestHandler):
         )
         REQUESTS.append(request)
         tools = {tool['function']['name'] for tool in request.get('tools', [])}
-        has_result = any(
+        results = sum(
             message.get('role') == 'tool' for message in request['messages']
         )
+        has_result = results > 0
         delta = {'role': 'assistant', 'content': 'SCRIPTED_COMPLETION'}
         finish = 'stop'
         if not has_result and 'task' in tools:
@@ -49,8 +55,8 @@ class MockProvider(BaseHTTPRequestHandler):
                 },
             )
             finish = 'tool_calls'
-        elif not has_result and 'read' in tools:
-            delta = self.call('read', {'filePath': self.fixture})
+        elif 'task' not in tools and 'read' in tools and results < len(self.reads):
+            delta = self.call('read', {'filePath': self.reads[results]})
             finish = 'tool_calls'
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream')
@@ -115,7 +121,9 @@ def main() -> None:
     thread.start()
     try:
         with tempfile.TemporaryDirectory(prefix='egm-native-probe-') as root:
-            root = Path(root)
+            # Canonical paths: on macOS /var is a symlink, and OpenCode would treat
+            # the unresolved fixture paths as external directories.
+            root = Path(root).resolve()
             project, home, install = (
                 root / 'project',
                 root / 'home',
@@ -124,7 +132,12 @@ def main() -> None:
             project.mkdir()
             home.mkdir()
             (project / '.env').write_text(SECRET + '\n')
-            MockProvider.fixture = str(project / '.env')
+            (project / 'AGENTS.md').write_text(AMBIENT + '\n')
+            (project / 'pkg').mkdir()
+            (project / 'pkg' / 'AGENTS.md').write_text(NESTED + '\n')
+            (project / 'pkg' / 'notes.txt').write_text(NOTES + '\n')
+            # A denied read ends the child's turn, so it goes last.
+            MockProvider.reads = [str(project / 'pkg' / 'notes.txt'), str(project / '.env')]
             subprocess.run(
                 [
                     'python3',
@@ -213,6 +226,9 @@ def main() -> None:
             assert any(
                 MARKER in json.dumps(r) for r in parent_requests
             ), 'Parent marker did not reach provider'
+            assert all(
+                AMBIENT in json.dumps(r) for r in parent_requests
+            ), 'Project instructions did not reach the orchestrator'
             children = [
                 r
                 for r in REQUESTS
@@ -250,6 +266,12 @@ def main() -> None:
                 'child_marker_present': any(
                     MARKER in json.dumps(r) for r in children
                 ),
+                'child_project_instructions_present': any(
+                    AMBIENT in json.dumps(r) for r in children
+                ),
+                'child_nested_instructions_present': any(
+                    NESTED in json.dumps(r) for r in children
+                ),
                 'child_tool_results': results,
             }
             (args.output / 'child-observations.json').write_text(
@@ -258,6 +280,13 @@ def main() -> None:
             assert all(
                 SECRET not in r for r in results
             ), 'Synthetic secret reached child'
+            assert any(NOTES in r for r in results), 'Nested fixture read did not reach child'
+            assert all(
+                AMBIENT not in json.dumps(r) for r in children
+            ), 'Project instructions reached child'
+            assert all(
+                NESTED not in json.dumps(r) for r in children
+            ), 'Nested instructions reached child'
             assert any(
                 'prevents you from using this specific tool call' in r
                 for r in results
@@ -271,8 +300,11 @@ def main() -> None:
                 'parent_marker_seen_in_parent': True,
                 'parent_marker_in_child': False,
                 'fixture_env_read': 'denied',
+                'project_instructions_in_orchestrator': True,
+                'project_instructions_in_child': False,
+                'nested_instructions_in_child': False,
                 'scope': (
-                    'One scripted delegation and one synthetic read; not full '
+                    'One scripted delegation and two synthetic reads; not full '
                     'workflow, model behavior, or general isolation'
                 ),
             }

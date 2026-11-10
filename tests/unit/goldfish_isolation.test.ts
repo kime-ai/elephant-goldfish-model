@@ -3,10 +3,10 @@
 
 // Run through tests/unit/test_goldfish_isolation.py, or directly with `bun test`.
 import { describe, expect, test } from "bun:test"
-import * as isolation from "../../adapters/opencode/goldfish_isolation/isolate.ts"
+import { isolate } from "../../adapters/opencode/goldfish_isolation/isolate.ts"
+import { parseAgents } from "../../adapters/opencode/goldfish_isolation/options.ts"
 import type { Message, Request, SystemPart } from "../../adapters/opencode/goldfish_isolation/isolate.ts"
 
-const { isolate } = isolation
 const REVIEWERS = new Set(["egm-structural"])
 const AMBIENT = "Instructions from: /p/AGENTS.md\nSECRET"
 
@@ -168,15 +168,15 @@ describe("other agents", () => {
 
 describe("parseAgents", () => {
   test("returns the configured reviewer names", () => {
-    expect(isolation.parseAgents({ agents: ["egm-style", "egm-structural"] })).toEqual(
+    expect(parseAgents({ agents: ["egm-style", "egm-structural"] })).toEqual(
       new Set(["egm-style", "egm-structural"]),
     )
   })
 
-  test.each([{}, { agents: [] }, { agents: "egm-style" }, { agents: ["egm-style", 1] }, { agents: [""] }])(
+  test.each([undefined, {}, { agents: [] }, { agents: "egm-style" }, { agents: ["egm-style", 1] }, { agents: [""] }])(
     "rejects misconfigured options %#",
     (options) => {
-      expect(() => isolation.parseAgents(options)).toThrow(/agents/)
+      expect(() => parseAgents(options)).toThrow(/^egm-goldfish-isolation: options\.agents/)
     },
   )
 })

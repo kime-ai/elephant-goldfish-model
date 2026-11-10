@@ -30,7 +30,8 @@ npm install --prefix /absolute/opencode-v1 opencode-ai@1.18.29
 
 Inspect the generated `opencode.json` and `installation.json` before use.
 The latter records package identity and SHA-256 hashes of all bundled files.
-The native configuration contains seven commands, eight reviewers, and the `egm` primary agent.
+The native configuration contains seven commands, eight reviewers, the `egm` primary agent,
+and the `egm-goldfish-isolation` plugin described under [Instruction isolation](#instruction-isolation).
 Native skill aliases use the canonical frontmatter names and link to the unchanged skill directories.
 
 Start OpenCode from the project directory with the candidate configuration:
@@ -93,7 +94,9 @@ Reviewers deny every tool except `read` and `glob`.
 `grep` is denied because its searches bypass the host's per-file `read` rules,
 including the `.env` exclusions. Use permitted file reads for review context.
 V1 maps MCP resource reads and resource lists to the `read` permission.
-The reviewer `read` rules allow local reads, then deny `mcp:*`.
+The reviewer `read` rules allow local reads, then deny `mcp:*` and the instruction files
+`AGENTS.md`, `CLAUDE.md`, and `CONTEXT.md` (each also in lowercase) at the worktree root and in any
+directory. Only those exact file names are denied; `SUBAGENTS.md` stays readable.
 This denies `mcp:<server>:<uri>` reads and `mcp:<server>:*` resource or template lists.
 MCP resource tool names can remain visible. Their resource access is denied at the permission check.
 The adapter's external-directory exception covers only the installed bundle.
@@ -106,6 +109,44 @@ Honor `EGM artifact directory: <path>` in the user's prompt or loaded instructio
 Resolve a relative output directory against the project directory. Otherwise retain the canonical output filenames and working-directory default.
 Preserve each readiness, section, and stage approval gate. Ask one plain-text question when the native question tool is unavailable.
 Wait for the user's answer. Missing tools and elapsed time do not constitute approval.
+
+## Instruction isolation
+
+OpenCode 1.18.29 adds instruction files to every agent's system prompt, including reviewers:
+the global `AGENTS.md` (or else `~/.claude/CLAUDE.md`); every project `AGENTS.md` from the
+working directory up to the worktree root, or else every `CLAUDE.md` on that path, or else every
+`CONTEXT.md`; and files or URLs in the `instructions` setting. Each is rendered as `Instructions from: <path>` followed by the file. When an agent
+reads a file, the read tool also appends nearby instruction files to its output in a
+`<system-reminder>` and lists their paths in `metadata.loaded`.
+
+The installer copies `adapters/opencode/goldfish_isolation/` into the bundle and lists its
+`v1.ts` entry under `plugin`, with the eight reviewer names as its `agents` option. For those
+agents it removes every instruction block, not only `AGENTS.md`:
+
+- `experimental.chat.messages.transform` records each session's agent from its latest user
+  message, and strips the reminder from reviewer sessions' read results.
+- `experimental.chat.system.transform`, which runs later in the same step, re-reads each file
+  named by an `Instructions from:` line in a reviewer session and removes the block only
+  if it matches exactly.
+
+The system hook does not name the agent. OpenCode 1.18.29 adds instructions in one place,
+directly after the messages hook runs for the session, so every request that carries them
+comes from a recorded session. Requests without instructions, such as title generation, can
+come first and pass unchanged.
+
+Changes apply only to the outgoing request; stored history keeps the read output. The `egm`
+agent keeps its instructions.
+
+The plugin fails closed. If it cannot verify a block, such as a remote `instructions` URL or a
+file that changed during the request, it throws. OpenCode then ends the reviewer task with
+`egm-goldfish-isolation: cannot remove the instructions from <path>; refusing the request`
+instead of sending it. A request with instructions from a session it never recorded, which
+would mean OpenCode changed the order above, is refused the same way for every agent. The
+plugin also refuses to load without a non-empty `agents` list. When it acts, it logs
+`[egm-goldfish-isolation] <agent>: removed N instruction block(s)` to stderr.
+
+It depends on two experimental hooks and on the rendering above, so repeat the native probe
+after upgrading OpenCode. `glob` still shows that an instruction file exists.
 
 ## Verification limits
 
@@ -129,7 +170,10 @@ No live model test runs in ordinary CI.
 
 The scoped OpenCode native probe uses a scripted local model, not a live model.
 It checks native child dispatch, one parent marker, and denial of a synthetic
-`.env` read. It requires the pinned OpenCode 1.18.29 Linux x64 executable.
+`.env` read. It also checks that a project `AGENTS.md` reaches the orchestrator but not the
+reviewer, and that a nested `AGENTS.md` loaded by a reviewer read is removed while the file's
+content arrives. CI uses the pinned OpenCode 1.18.29 Linux x64 executable; the
+`opencode-darwin-arm64@1.18.29` package runs the same probe on Apple silicon.
 
 ```sh
 npm ci --ignore-scripts --prefix tests/integration/opencode-ci
