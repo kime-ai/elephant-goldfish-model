@@ -107,10 +107,21 @@ hooks change only the outgoing request for the reviewers, and keep an allowlist:
 - **Tools.** Only `read` and `glob`. Because `skill` is not offered, a reviewer's attempt to
   use it is an unavailable tool, not a denied call; the native probe checks the exact toolset.
 
-The plugin fails closed. If a reviewer's request has no copy of its own prompt, which means
-V2 changed how it builds requests, the plugin throws and the review does not start. It also
-refuses to load without a non-empty `reviewers` map. When it removes something, it logs
+Each request fails closed. If a reviewer's request has no copy of its own prompt, which means V2
+changed how it builds requests, the plugin throws, the subagent ends in an error, and no request
+reaches the model. When the plugin removes something, it logs
 `[egm-guard] <agent>: removed N injected item(s)` to the server log.
+
+A plugin that fails to load does not fail closed. V2 2.2.6 logs a warning, `failed to load
+plugin plugin.id=egm-guard`, and runs the reviewer with OpenCode's default instructions: the
+project and nested `AGENTS.md` reach it, and it is offered `skill`. The plugin rejects a missing
+or malformed `reviewers` map, so that is how a bad configuration fails, and no other check
+catches it. A unit test installs both interfaces and passes the generated options to the
+plugin's own parser, so an installer that drifts from the plugin fails the test. After a manual
+edit to the generated configuration, look for that warning in the server log
+(`opencode --standalone --print-logs`). The native probe installs its own copy, so it checks the
+installer's output, not a file edited by hand. Making a missing plugin fatal means making
+reviewer dispatch depend on it, which is part of the guard on #282.
 
 The reviewer read rules also deny direct reads of `AGENTS.md` and `agents.md`. This goes beyond
 the guard proposed on #282, and it blocks a review whose target is an `AGENTS.md` file.

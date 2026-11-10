@@ -145,9 +145,18 @@ The plugin fails closed. If it cannot verify a block, such as a remote `instruct
 file that changed during the request, it throws. OpenCode then ends the reviewer task with
 `egm-guard: cannot remove the instructions from <path>; refusing the request`
 instead of sending it. A request with instructions from a session it never recorded, which
-would mean OpenCode changed the order above, is refused the same way for every agent. The
-plugin also refuses to load without a non-empty `reviewers` map. When it acts, it logs
-`[egm-guard] <agent>: removed N instruction block(s)` to stderr.
+would mean OpenCode changed the order above, is refused the same way for every agent. When the
+plugin acts, it logs `[egm-guard] <agent>: removed N instruction block(s)` to stderr.
+
+A plugin that fails to load does not fail closed. OpenCode 1.18.29 logs
+`failed to load plugin` at error level, with the plugin's message, and runs the reviewer with
+OpenCode's default instructions: the project and nested `AGENTS.md` reach it. The plugin rejects
+a missing or malformed `reviewers` map, so that is how a bad configuration fails, and no other
+check catches it. A unit test installs both interfaces and passes the generated options to the
+plugin's own parser, so an installer that drifts from the plugin fails the test. After a manual
+edit to the generated configuration, look for that error in the logs (`opencode --print-logs`).
+The native probe installs its own copy, so it checks the installer's output, not a file edited
+by hand.
 
 It depends on two experimental hooks and on the rendering above, so repeat the native probe
 after upgrading OpenCode. `glob` still shows that an instruction file exists.
