@@ -66,11 +66,11 @@ the parent conversation.
 V2 evaluates one ordered `permissions` list per agent; the last matching rule
 wins and agent rules follow the base and global rules.
 
-Reviewers start with `*` deny, then allow `read` (except `.env` files) and
-`glob`, and allow external directories only inside the bundle. The `*` deny
-covers `grep`, whose resource is the search pattern rather than a path, so it
-would bypass the `.env` read rules. It also covers shell, edits, web, MCP tools
-and resources, Code Mode, skills, questions, todos, and delegation.
+Reviewers start with `*` deny, then allow `read` (except `.env` and `AGENTS.md`
+files) and `glob`, and allow external directories only inside the bundle. The
+`*` deny covers `grep`, whose resource is the search pattern rather than a path,
+so it would bypass the `.env` read rules. It also covers shell, edits, web, MCP
+tools and resources, Code Mode, skills, questions, todos, and delegation.
 
 The `egm` agent asks by default, allows reads, `glob`, `grep`, questions for
 approval gates, `todowrite`, `egm-*` skills, and the eight reviewers. The
@@ -78,12 +78,48 @@ configuration sets `experimental.todo` so that `todowrite` exists. V2 allows
 external directories by default; this agent restores the V1 prompt except for
 the bundle.
 
+## Instruction isolation
+
+V2 adds global and project `AGENTS.md` files to every agent's instructions,
+including subagents, and has no per-agent setting to skip them. Reading a file
+also loads any nested `AGENTS.md` between that file and the workspace. The
+installer adds the `egm-goldfish-isolation` server plugin from
+`bundle/adapters/opencode/goldfish_isolation/`, with the eight reviewer names as
+its `agents` option. Its `context` and `compaction` hooks change only the
+outgoing request for those agents:
+
+- The `core/instructions` source is removed from the instructions system part,
+  which V2 lists in `metadata.experimental.instructions`. A system part without
+  a valid source list is dropped if a line starts with `Instructions from:` or
+  `The instructions from` and names an `AGENTS.md` file.
+- User messages that start with `Instructions from: <path>/AGENTS.md`, which is
+  how V2 delivers nested files, are dropped.
+- System messages with such a line, which is how V2 announces instruction
+  changes, are dropped.
+
+Only those line markers count. A task or persona that discusses `AGENTS.md`
+in prose is kept, and assistant and tool messages are never removed.
+
+The plugin refuses to load without a non-empty `agents` list, so a
+misconfigured install fails in the server log instead of running unisolated.
+The reviewer read rules block direct reads of `AGENTS.md`. The plugin logs
+`[egm-goldfish-isolation] <agent>: removed N AGENTS.md block(s)` to the server
+log when it acts. It depends on an experimental field and on V2's instruction
+wording, so verify it after upgrading OpenCode. It also removes files loaded
+through the `instructions` setting. `glob` still shows that an `AGENTS.md`
+exists. Mixed-case names other than `AGENTS.md` and `agents.md` are not covered
+by the read rules.
+
+The plugin's tests in `tests/unit/goldfish_isolation.test.ts` run under Bun;
+`tests/unit/test_goldfish_isolation.py` runs them and skips when Bun is not
+installed.
+
 ## Differences from V1
 
 - No `autoupdate` field: V2 reads `update` only from global configuration.
 - No `mcp:*` read rule: V2 checks MCP resources under their own actions.
 - No `--agent` flag: `default_agent` selects `egm`.
-- V2 still adds project instructions such as `AGENTS.md` to each agent's
-  `system` prompt, including reviewers. A fresh child session is not proof of
-  Goldfish isolation; see the V1 verification limits.
+- V2 adds `AGENTS.md` to each agent's instructions, including reviewers; the
+  isolation plugin removes it for reviewers. A fresh child session is still not
+  proof of Goldfish isolation; see the V1 verification limits.
 - The V1 native probe and trace verifier target 1.18.29 and do not run on V2.

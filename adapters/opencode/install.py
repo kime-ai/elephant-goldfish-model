@@ -13,6 +13,7 @@ import re
 import shutil
 
 ROOT = Path(__file__).resolve().parents[2]
+ISOLATION_PLUGIN = Path("adapters/opencode/goldfish_isolation")
 REVIEWERS = (
     "codebase_details", "comprehension", "design_critic",
     "implementation_readiness", "inventive_catalyst", "structural", "style", "zoom_out",
@@ -35,7 +36,7 @@ def install(destination: Path, host: str = "v1") -> Path:
     target = HOSTS[host]
     destination = checked_destination(destination)
     destination.mkdir(parents=True)
-    bundle = copy_bundle(destination / "bundle")
+    bundle = copy_bundle(destination / "bundle", target.extras)
     guide = bundle / target.guide
     context = (
         f"Read {guide} first. EGM bundle root: {bundle}. "
@@ -73,10 +74,10 @@ def checked_destination(destination: Path) -> Path:
     return destination
 
 
-def copy_bundle(bundle: Path) -> Path:
-    """Copy the canonical resources into a new bundle."""
+def copy_bundle(bundle: Path, extras: tuple[Path, ...]) -> Path:
+    """Copy the canonical resources, plus host-specific trees, into a new bundle."""
     bundle.mkdir()
-    for directory in ("skills", "agents", "resources", "docs"):
+    for directory in ("skills", "agents", "resources", "docs", *extras):
         shutil.copytree(ROOT / directory, bundle / directory)
     for filename in ("plugin.json", "LICENSE", "README.md", "TESTING.md"):
         shutil.copy2(ROOT / filename, bundle / filename)
@@ -204,6 +205,10 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
                 rule("read", "*.env", "deny"),
                 rule("read", "*.env.*", "deny"),
                 rule("read", "*.env.example", "allow"),
+                # Goldfish isolation; the plugin removes injected AGENTS.md, this blocks
+                # direct reads. The lowercase rule covers case-insensitive filesystems.
+                rule("read", "*AGENTS.md", "deny"),
+                rule("read", "*agents.md", "deny"),
                 rule("glob", "*", "allow"),
                 rule("external_directory", "*", "deny"),
                 rule("external_directory", bundle_dir, "allow"),
@@ -246,6 +251,10 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
         "default_agent": "egm",
         "skills": [str(skills)],
         "experimental": {"todo": True},
+        "plugins": [{
+            "package": str(bundle / ISOLATION_PLUGIN),
+            "options": {"agents": sorted(set(agents) - {"egm"})},
+        }],
         "agents": agents,
         "commands": commands,
     }
@@ -258,11 +267,12 @@ class Host:
     version: str
     guide: str
     build: Callable[[Path, Path, str, dict], dict]
+    extras: tuple[Path, ...] = ()
 
 
 HOSTS = {
     "v1": Host("1.18.29", "docs/opencode.md", v1_config),
-    "v2": Host("2.2.5", "docs/opencode_v2.md", v2_config),
+    "v2": Host("2.2.5", "docs/opencode_v2.md", v2_config, (ISOLATION_PLUGIN,)),
 }
 
 

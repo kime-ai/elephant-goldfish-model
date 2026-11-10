@@ -249,7 +249,23 @@ def test_v2_install_native_contract(tmp_path: Path) -> None:
     assert allowed == reviewers
     guide = " ".join((bundle / "docs/opencode_v2.md").read_text().split())
     assert "Do not pass parent history, private reasoning, or memory." in guide
+
     assert config["experimental"] == {"todo": True}
+    plugin = bundle / "adapters/opencode/goldfish_isolation"
+    assert config["plugins"] == [{"package": str(plugin), "options": {"agents": sorted(reviewers)}}]
+    sources = sorted((ROOT / "adapters/opencode/goldfish_isolation").glob("*.ts"))
+    assert {path.name for path in sources} >= {"index.ts", "isolate.ts"}
+    for source in sources:
+        assert (plugin / source.name).read_bytes() == source.read_bytes()
+        key = f"bundle/adapters/opencode/goldfish_isolation/{source.name}"
+        assert identity["sha256"][key] == hashlib.sha256(source.read_bytes()).hexdigest()
+
+
+def test_v1_install_omits_isolation_plugin(tmp_path: Path) -> None:
+    destination = tmp_path / "candidate"
+    config = json.loads(ADAPTER["install"](destination).read_text())
+    assert not {"plugins", "experimental"} & set(config)
+    assert not (destination / "bundle/adapters").exists()
 
 
 def test_v2_permissions_enforce_reviewer_boundary(tmp_path: Path) -> None:
@@ -282,8 +298,13 @@ def test_v2_permissions_enforce_reviewer_boundary(tmp_path: Path) -> None:
                 ("subagent", "egm-style"), ("opencode_read_mcp_resource", "s:u"), ("execute", "*"),
             ):
                 assert v2_effect(rules, action, resource) == "deny", (name, action)
+        instructions = ("AGENTS.md", "pkg/AGENTS.md", "/home/u/.config/opencode/AGENTS.md", "agents.md")
+        for path in instructions:
+            assert v2_effect(rules, "read", path) == ("deny" if reviewer else "allow"), (name, path)
         assert v2_effect(rules, "todowrite", "*") == ("deny" if reviewer else "allow")
-        if not reviewer:
+        if reviewer:
+            assert v2_effect(rules, "read", "README.md") == "allow"
+        else:
             assert v2_effect(rules, "question", "*") == "allow"
             assert v2_effect(rules, "edit", "design_draft.md") == "ask"
             assert v2_effect(rules, "skill", "egm-review") == "allow"
