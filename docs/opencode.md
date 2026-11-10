@@ -191,7 +191,7 @@ It checks native child dispatch, one parent marker, and denial of a synthetic
 `.env` read. It also checks that a project `AGENTS.md` reaches the orchestrator but not the
 reviewer, and that a nested `AGENTS.md` loaded by a reviewer read is removed while the file's
 content arrives. `--interface v2` runs the same checks against the
-[V2 adapter](opencode_v2.md#native-probe). The pinned Linux x64 executables are in
+[V2 interface](opencode_v2.md#native-probe). The pinned Linux x64 executables are in
 `tests/integration/opencode-ci`:
 
 ```sh
@@ -254,7 +254,7 @@ summary or an absent marker as sufficient isolation evidence.
 Each interface records one probed OpenCode release: the newest release the scripted native probe
 passed on. It is `probed` in `adapters/opencode/install.py`, `host_version` in
 `installation.json`, and the pinned package in `tests/integration/opencode-ci`; a unit test keeps
-the three equal. The probe accepts any release of the adapter's major version and records the one
+the three equal. The probe accepts any release of the interface's major version and records the one
 it ran.
 
 A probed release is not a supported one. The probe uses a scripted model and checks one

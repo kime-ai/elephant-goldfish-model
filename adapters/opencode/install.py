@@ -281,7 +281,7 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
 class Interface:
     """What one OpenCode configuration interface needs from the installer."""
 
-    # The newest host release the scripted native probe passed on. This is not a support claim:
+    # The newest OpenCode release the scripted native probe passed on. This is not a support claim:
     # support needs the installation, workflow, and isolation checks in docs/opencode.md.
     probed: str
     guide: str

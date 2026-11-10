@@ -61,7 +61,7 @@ def test_gating_workflow_probes_every_interface_at_its_pinned_version() -> None:
     assert "schedule" not in workflow("opencode-native")[True]
 
 
-def test_pinned_executables_are_the_probed_host_versions() -> None:
+def test_pinned_executables_are_the_probed_releases() -> None:
     pins = json.loads((ROOT / "tests/integration/opencode-ci/package.json").read_text())["dependencies"]
     probed = {name: item.probed for name, item in INSTALLER["INTERFACES"].items()}
     assert {name: pins[item["package"]] for name, item in interfaces("opencode-native").items()} == probed
@@ -96,15 +96,15 @@ def test_probe_and_installer_select_the_same_interfaces() -> None:
 
 
 def test_each_guide_targets_the_host_release_the_installer_names() -> None:
-    # #146 scopes the adapter to one host release; other releases are not claimed.
-    for name, host in INSTALLER["INTERFACES"].items():
-        guide = (ROOT / host.guide).read_text().split("\n## ")[0]
-        assert re.search(rf"targets OpenCode (CLI )?\*\*{re.escape(host.probed)}\*\*", guide), name
+    # #146 scopes the adapter to one OpenCode release; other releases are not claimed.
+    for name, interface in INSTALLER["INTERFACES"].items():
+        guide = (ROOT / interface.guide).read_text().split("\n## ")[0]
+        assert re.search(rf"targets OpenCode (CLI )?\*\*{re.escape(interface.probed)}\*\*", guide), name
 
 
 def test_each_guide_cites_interface_sources_at_the_release_the_installer_names() -> None:
-    for name, host in INSTALLER["INTERFACES"].items():
-        guide = (ROOT / host.guide).read_text()
+    for name, interface in INSTALLER["INTERFACES"].items():
+        guide = (ROOT / interface.guide).read_text()
         tags = re.findall(r"github\.com/anomalyco/opencode/blob/(v[^/]+)/", guide)
         assert tags, name
-        assert set(tags) == {f"v{host.probed}"}, name
+        assert set(tags) == {f"v{interface.probed}"}, name
