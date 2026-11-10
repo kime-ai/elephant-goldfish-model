@@ -3,7 +3,7 @@
 # OpenCode V2 integration (experimental)
 
 This adapter targets OpenCode 2.x with the native V2 `agents`,
-`permissions`, `commands`, and `subagent` interfaces. The native probe passes on **2.2.5**;
+`permissions`, `commands`, and `subagent` interfaces. The native probe passes on **2.2.6**;
 that is not a support claim. See [Host versions](opencode.md#host-versions) for what the probe
 covers and for other 2.x releases. For OpenCode 1.x, use the
 [V1 integration](opencode.md). Installation checks do not establish workflow or
@@ -158,5 +158,5 @@ python tests/integration/opencode_native_probe.py --interface v2 \
 ```
 
 On another platform, install that platform's package, such as
-`@opencode/cli-darwin-arm64@2.2.5`, and pass its `bin/opencode`. A passing probe does not
+`@opencode/cli-darwin-arm64@2.2.6`, and pass its `bin/opencode`. A passing probe does not
 establish live model behavior, full workflows, or general reviewer isolation.

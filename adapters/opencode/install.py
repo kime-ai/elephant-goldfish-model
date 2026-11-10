@@ -267,6 +267,7 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
     }
     return {
         "$schema": "https://opencode.ai/config.json",
+        "update": "disable",
         "default_agent": "egm",
         "skills": [str(skills)],
         "experimental": {"todo": True},
@@ -290,7 +291,7 @@ class Interface:
 
 INTERFACES = {
     "v1": Interface("1.18.29", "docs/opencode.md", v1_config, (ISOLATION_PLUGIN,)),
-    "v2": Interface("2.2.5", "docs/opencode_v2.md", v2_config, (ISOLATION_PLUGIN,)),
+    "v2": Interface("2.2.6", "docs/opencode_v2.md", v2_config, (ISOLATION_PLUGIN,)),
 }
 
 

@@ -243,7 +243,7 @@ def test_v2_install_native_contract(tmp_path: Path) -> None:
     config = json.loads(ADAPTER["install"](destination, "v2").read_text())
     identity = json.loads((destination / "installation.json").read_text())
     bundle = destination / "bundle"
-    assert identity["host_version"] == "2.2.5"
+    assert identity["host_version"] == ADAPTER["INTERFACES"]["v2"].probed
     assert not {"agent", "command", "permission", "autoupdate"} & set(config)
     assert config["default_agent"] == "egm"
     assert config["skills"] == [str(destination / "skills")]
@@ -276,6 +276,8 @@ def test_v2_install_native_contract(tmp_path: Path) -> None:
     assert "Do not pass parent history, private reasoning, or memory." in guide
 
     assert config["experimental"] == {"todo": True}
+    # The probed release stays fixed; V1's "autoupdate": false has this V2 counterpart.
+    assert config["update"] == "disable"
     plugin = bundle / PLUGIN
     assert config["plugins"] == [{"package": str(plugin), "options": expected_plugin_options(bundle)}]
     assert set(expected_plugin_options(bundle)["reviewers"]) == reviewers
