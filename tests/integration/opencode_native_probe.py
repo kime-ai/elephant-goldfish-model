@@ -27,6 +27,8 @@ AMBIENT = 'EGM_AMBIENT_INSTRUCTIONS_SENTINEL'
 NESTED = 'EGM_NESTED_INSTRUCTIONS_SENTINEL'
 NOTES = 'EGM_SYNTHETIC_NOTES'
 REVIEWER = 'egm-zoom-out'
+# What a reviewer must still receive: its persona file, named in its prompt, and its environment.
+KEPT = ('agents/zoom_out.md', 'Working directory:')
 TASK_PROMPT = 'Read the synthetic fixture files.'
 REQUESTS: list[dict[str, Any]] = []
 
@@ -91,14 +93,14 @@ INTERFACES = {
             'description': 'Probe child isolation',
             'prompt': TASK_PROMPT,
         }),
-        # V2 offers reviewers the skill tool and denies the call.
+        # V2 offers reviewers the skill tool despite their "*" deny, and refuses its calls. The
+        # guard plugin removes it, so the tool is unavailable rather than denied.
         child_calls=lambda project: [
             ('read', {'path': str(project / 'pkg' / 'notes.txt')}),
-            ('skill', {'id': 'egm-review'}),
             ('read', {'path': str(project / '.env')}),
         ],
-        child_tools=frozenset({'read', 'glob', 'skill'}),
-        denials=('Permission denied: skill', 'Permission denied: read'),
+        child_tools=frozenset({'read', 'glob'}),
+        denials=('Permission denied: read',),
         provider=lambda url: {'providers': {'fixture': {
             'package': '@opencode/ai/providers/openai-compatible',
             'settings': {'baseURL': url, 'apiKey': 'fixture'},
@@ -272,6 +274,9 @@ def check_requests(interface: Interface, task: dict[str, Any]) -> list[dict[str,
         task['input']['prompt'] in json.dumps(r) for r in children
     ), 'Child request does not match task prompt'
     assert all(MARKER not in json.dumps(r) for r in children), 'Parent marker reached child'
+    assert all(
+        kept in json.dumps(r) for r in children for kept in KEPT
+    ), 'Reviewer lost its persona prompt or environment'
     assert all(
         tool_names(r) == interface.child_tools for r in children
     ), f'Unexpected child tools: {[sorted(tool_names(r)) for r in children]}'

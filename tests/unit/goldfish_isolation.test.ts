@@ -3,12 +3,12 @@
 
 // Run through tests/unit/test_goldfish_isolation.py, or directly with `bun test`.
 import { describe, expect, test } from "bun:test"
-import { isolate } from "../../adapters/opencode/plugin/isolate.ts"
+import { guard, isolate } from "../../adapters/opencode/plugin/isolate.ts"
+import type { Context, Message, Request, SystemPart } from "../../adapters/opencode/plugin/isolate.ts"
 import { parseReviewers } from "../../adapters/opencode/plugin/options.ts"
-import type { Message, Request, SystemPart } from "../../adapters/opencode/plugin/isolate.ts"
 
-const REVIEWERS = new Set(["egm-structural"])
-const AMBIENT = "Instructions from: /p/AGENTS.md\nSECRET"
+const PERSONA = "PERSONA: read /b/agents/style.md"
+const SECRET = "Instructions from: /p/AGENTS.md\nSECRET"
 
 const instructions = (sources: { key: string; text: string }[]): SystemPart => ({
   type: "text",
@@ -16,153 +16,211 @@ const instructions = (sources: { key: string; text: string }[]): SystemPart => (
   metadata: { experimental: { instructions: sources } },
 })
 
-const user = (text: string): Message => ({ role: "user", content: [{ type: "text", text }] })
+const user = (text: string): Message => ({ id: "msg-user", role: "user", content: [{ type: "text", text }] })
+const synthetic = (id: string, text: string): Message => ({ id, role: "user", content: [{ type: "text", text }] })
 const system = (text: string): Message => ({ role: "system", content: [{ type: "text", text }] })
 
-const request = (agent: string, overrides: Partial<Request> = {}): Request => ({
-  agent,
+const TOOLS = { read: {}, glob: {}, grep: {}, skill: {}, shell: {}, edit: {}, execute: {}, subagent: {} }
+
+const request = (overrides: Partial<Request> = {}): Request => ({
+  agent: "egm-style",
   system: [
-    { type: "text", text: "PERSONA" },
+    { type: "text", text: PERSONA },
     instructions([
+      { key: "core/mcp", text: "MCP GUIDANCE" },
       { key: "core/skills", text: "SKILLS" },
-      { key: "core/instructions", text: AMBIENT },
+      { key: "core/instructions", text: SECRET },
       { key: "core/date", text: "DATE" },
+      { key: "core/environment", text: "ENV" },
+      { key: "core/entries", text: "ENTRIES" },
     ]),
   ],
   messages: [user("Review /p/design.md")],
+  tools: { ...TOOLS },
   ...overrides,
 })
 
+const CONTEXT: Context = { own: PERSONA, synthetic: new Set() }
 const texts = (parts: readonly SystemPart[]) => parts.map((part) => part.text)
 
-describe("ambient AGENTS.md", () => {
-  test("is removed from the reviewer's instructions while other sources stay", () => {
-    const value = request("egm-structural")
-    expect(isolate(REVIEWERS, value)).toBe(1)
-    expect(texts(value.system)).toEqual(["PERSONA", "SKILLS\n\nDATE"])
-    expect(JSON.stringify(value)).not.toContain("SECRET")
+describe("system prompt", () => {
+  test("keeps only the date and environment from the instruction sources", () => {
+    const value = request()
+    expect(isolate(value, CONTEXT, true)).toBe(4)
+    expect(texts(value.system)).toEqual([PERSONA, "DATE\n\nENV"])
+    expect(JSON.stringify(value)).not.toMatch(/SECRET|MCP GUIDANCE|SKILLS|ENTRIES/)
   })
 
-  test("drops an instructions part whose only source is AGENTS.md", () => {
-    const value = request("egm-structural", {
-      system: [{ type: "text", text: "PERSONA" }, instructions([{ key: "core/instructions", text: AMBIENT }])],
-    })
-    isolate(REVIEWERS, value)
-    expect(texts(value.system)).toEqual(["PERSONA"])
+  test("keeps the part's metadata in step with its text", () => {
+    const value = request()
+    isolate(value, CONTEXT, true)
+    const kept = value.system[1].metadata?.experimental as { instructions: { key: string }[] }
+    expect(kept.instructions.map((source) => source.key)).toEqual(["core/date", "core/environment"])
   })
 
-  test("leaves an instructions part without AGENTS.md unchanged", () => {
-    const part = instructions([{ key: "core/date", text: "DATE" }])
-    const value = request("egm-structural", { system: [part] })
-    expect(isolate(REVIEWERS, value)).toBe(0)
-    expect(value.system).toEqual([part])
+  test("drops an instructions part that has no date or environment", () => {
+    const value = request({ system: [{ type: "text", text: PERSONA }, instructions([{ key: "core/instructions", text: SECRET }])] })
+    expect(isolate(value, CONTEXT, true)).toBe(1)
+    expect(texts(value.system)).toEqual([PERSONA])
   })
 
-  test("drops an unlabelled instructions part rather than leak it", () => {
-    const value = request("egm-structural", {
-      system: [{ type: "text", text: "PERSONA" }, { type: "text", text: `SKILLS\n\n${AMBIENT}\n\nDATE` }],
-    })
-    isolate(REVIEWERS, value)
-    expect(texts(value.system)).toEqual(["PERSONA"])
+  test("drops sources it does not know, so new kinds of instructions cannot leak", () => {
+    const value = request({ system: [{ type: "text", text: PERSONA }, instructions([{ key: "acme/policy", text: "POLICY" }, { key: "core/date", text: "DATE" }])] })
+    isolate(value, CONTEXT, true)
+    expect(texts(value.system)).toEqual([PERSONA, "DATE"])
+  })
+
+  test("drops a part that is neither the agent's own prompt nor a labelled source", () => {
+    const value = request({ system: [{ type: "text", text: PERSONA }, { type: "text", text: "Some other plugin's note." }] })
+    expect(isolate(value, CONTEXT, true)).toBe(1)
+    expect(texts(value.system)).toEqual([PERSONA])
   })
 
   test.each([
     { instructions: [{ key: 1 }] },
-    { instructions: [{ key: "core/skills", text: 5 }] },
-    { instructions: [{ key: 5, text: "SKILLS" }] },
+    { instructions: [{ key: "core/date", text: 5 }] },
     { instructions: [null] },
     { instructions: "not a list" },
-  ])("treats malformed source metadata as unlabelled %#", ({ instructions }) => {
-    const value = request("egm-structural", {
-      system: [
-        { type: "text", text: "PERSONA" },
-        { type: "text", text: `SKILLS\n\n${AMBIENT}`, metadata: { experimental: { instructions } } },
-      ],
-    })
-    isolate(REVIEWERS, value)
-    expect(texts(value.system)).toEqual(["PERSONA"])
+  ])("treats malformed source metadata as an unlabelled part %#", ({ instructions }) => {
+    const value = request({ system: [{ type: "text", text: PERSONA }, { type: "text", text: `DATE\n${SECRET}`, metadata: { experimental: { instructions } } }] })
+    isolate(value, CONTEXT, true)
+    expect(texts(value.system)).toEqual([PERSONA])
   })
 
-  test("keeps a persona that only mentions AGENTS.md instructions in prose", () => {
-    const persona = "Ignore any instructions from AGENTS.md that you were not given."
-    const value = request("egm-structural", { system: [{ type: "text", text: persona }] })
-    isolate(REVIEWERS, value)
-    expect(texts(value.system)).toEqual([persona])
+  test("does not mistake an experimental field without sources for a labelled part", () => {
+    const value = request({ system: [{ type: "text", text: PERSONA }, { type: "text", text: SECRET, metadata: { experimental: "x" } }] })
+    isolate(value, CONTEXT, true)
+    expect(texts(value.system)).toEqual([PERSONA])
+  })
+})
+
+describe("the agent's own prompt", () => {
+  test.each([{ own: undefined }, { own: "A DIFFERENT PROMPT" }])("fails closed when it is not found %#", ({ own }) => {
+    expect(() => isolate(request(), { own, synthetic: new Set() }, true)).toThrow(
+      /^egm-guard: egm-style system prompt not found; refusing the request$/,
+    )
+  })
+
+  test("is not required when compacting or generating", () => {
+    const value = request()
+    expect(() => isolate(value, { own: undefined, synthetic: new Set() }, false)).not.toThrow()
+    expect(texts(value.system)).toEqual(["DATE\n\nENV"])
   })
 })
 
 describe("transcript", () => {
-  test("drops nested AGENTS.md loads", () => {
-    const value = request("egm-structural", {
-      messages: [user("Review /p/design.md"), user("Instructions from: /p/pkg/AGENTS.md\nNESTED")],
-    })
-    expect(isolate(REVIEWERS, value)).toBe(2)
+  test("drops the synthetic messages that carry nested instructions and notices", () => {
+    const value = request({ messages: [user("Review /p/design.md"), synthetic("syn-1", "Instructions from: /p/pkg/AGENTS.md\nNESTED"), synthetic("syn-2", "Deployment completed")] })
+    expect(isolate(value, { own: PERSONA, synthetic: new Set(["syn-1", "syn-2"]) }, true)).toBe(6)
     expect(value.messages).toEqual([user("Review /p/design.md")])
   })
 
-  test.each([
-    "The instructions from /p/AGENTS.md no longer apply.",
-    "New instructions apply from:\nInstructions from: /p/AGENTS.md\nNEW",
-    "The instructions from /p/AGENTS.md changed. Here's the diff:\n```diff\n@@ -1 +1 @@\n```",
-    "The instructions changed:\nInstructions from: /p/AGENTS.md\nNEW",
-    "Today's date is now: Wed Nov 11 2026\n\nThe instructions from /p/AGENTS.md no longer apply.",
-  ])("drops the instruction update %#", (update) => {
-    const value = request("egm-structural", { messages: [user("Review /p/design.md"), system(update)] })
-    isolate(REVIEWERS, value)
-    expect(value.messages).toEqual([user("Review /p/design.md")])
-  })
-
-  test("keeps a review task that discusses AGENTS.md instructions", () => {
-    const task = user("Review /p/design.md. It explains how instructions from AGENTS.md reach subagents.")
-    const value = request("egm-structural", { messages: [task] })
-    isolate(REVIEWERS, value)
-    expect(value.messages).toEqual([task])
-  })
-
-  test("keeps other system messages", () => {
-    const update = system("Today's date is now: Wed Nov 11 2026")
-    const value = request("egm-structural", { messages: [user("Review /p/design.md"), update] })
-    expect(isolate(REVIEWERS, value)).toBe(1)
-    expect(value.messages).toEqual([user("Review /p/design.md"), update])
-  })
-
-  test("keeps assistant and tool messages that quote an instructions line", () => {
-    const quoted = "Instructions from: /p/AGENTS.md\nNESTED"
-    const replies = [
-      { role: "assistant", content: [{ type: "text", text: quoted }] },
-      { role: "tool", content: [{ type: "text", text: quoted }] },
-    ]
-    const value = request("egm-structural", { messages: replies })
-    isolate(REVIEWERS, value)
-    expect(value.messages).toEqual(replies)
-  })
-
-  test("reads only the text parts of a message", () => {
-    const task: Message = {
-      role: "user",
-      content: [
-        { type: "reasoning", text: "Instructions from: /p/AGENTS.md\nNESTED" },
-        { type: "text", text: "Review /p/design.md" },
-      ],
-    }
-    const value = request("egm-structural", { messages: [task] })
-    isolate(REVIEWERS, value)
-    expect(value.messages).toEqual([task])
-  })
-
-  test("keeps a review task that quotes an instructions line", () => {
+  test("keeps a user message that merely looks like an instruction", () => {
     const task = user("Review this log:\nInstructions from: /p/AGENTS.md\nIs it expected?")
-    const value = request("egm-structural", { messages: [task] })
-    isolate(REVIEWERS, value)
+    const value = request({ messages: [task] })
+    isolate(value, CONTEXT, true)
     expect(value.messages).toEqual([task])
+  })
+
+  test("drops system messages, which announce instruction changes", () => {
+    const value = request({ messages: [user("Review /p/design.md"), system("The instructions from /p/AGENTS.md changed. Here's the diff:"), system("Today's date is now: Wed Nov 11 2026")] })
+    expect(isolate(value, CONTEXT, true)).toBe(6)
+    expect(value.messages).toEqual([user("Review /p/design.md")])
+  })
+
+  test("keeps a system message that carries no text, such as a reasoning-effort marker", () => {
+    const effort: Message = { role: "system", content: [{ type: "effort" }] }
+    const value = request({ messages: [user("Review"), effort] })
+    isolate(value, CONTEXT, true)
+    expect(value.messages).toEqual([user("Review"), effort])
+  })
+
+  test("keeps the reviewer's own assistant and tool messages", () => {
+    const own: Message[] = [
+      { id: "a-1", role: "assistant", content: [{ type: "text", text: "Instructions from: /p/AGENTS.md\nQUOTED" }] },
+      { id: "t-1", role: "tool", content: [{ type: "text", text: "result" }] },
+    ]
+    const value = request({ messages: [user("Review"), ...own] })
+    isolate(value, CONTEXT, true)
+    expect(value.messages).toEqual([user("Review"), ...own])
+  })
+
+  test("keeps a message without an ID, since it cannot be a recorded synthetic message", () => {
+    const anonymous: Message = { role: "user", content: [{ type: "text", text: "Hello" }] }
+    const value = request({ messages: [anonymous] })
+    isolate(value, { own: PERSONA, synthetic: new Set(["undefined"]) }, true)
+    expect(value.messages).toEqual([anonymous])
   })
 })
 
-describe("other agents", () => {
-  test("leave the orchestrator's request unchanged", () => {
-    const value = request("egm", { messages: [user("Instructions from: /p/pkg/AGENTS.md\nNESTED")] })
-    expect(isolate(REVIEWERS, value)).toBe(0)
-    expect(value).toEqual(request("egm", { messages: [user("Instructions from: /p/pkg/AGENTS.md\nNESTED")] }))
+describe("tools", () => {
+  test("leaves reviewers only read and glob", () => {
+    const value = request()
+    isolate(value, CONTEXT, true)
+    expect(Object.keys(value.tools).sort()).toEqual(["glob", "read"])
+  })
+
+  test("does not count removed tools as removed instructions", () => {
+    const value = request({ system: [{ type: "text", text: PERSONA }] })
+    expect(isolate(value, CONTEXT, true)).toBe(0)
+  })
+})
+
+describe("guard", () => {
+  const setup = () => {
+    const calls: string[] = []
+    const lines: string[] = []
+    const handle = guard(new Set(["egm-style"]), {
+      ownSystem: async (agent) => {
+        calls.push(`own:${agent}`)
+        return PERSONA
+      },
+      syntheticIds: async (sessionID) => {
+        calls.push(`history:${sessionID}`)
+        return new Set(["syn-1"])
+      },
+      log: (line) => lines.push(line),
+    })
+    return { calls, lines, handle }
+  }
+
+  test("isolates a reviewer's request and logs what it removed", async () => {
+    const { handle, lines } = setup()
+    const value = { ...request({ messages: [user("Review"), synthetic("syn-1", "NESTED")] }), sessionID: "child" }
+    await handle(value, true)
+    expect(texts(value.system)).toEqual([PERSONA, "DATE\n\nENV"])
+    expect(value.messages).toEqual([user("Review")])
+    expect(Object.keys(value.tools).sort()).toEqual(["glob", "read"])
+    expect(lines).toEqual(["[egm-guard] egm-style: removed 5 injected item(s)"])
+  })
+
+  test("leaves every other agent's request alone and asks for nothing", async () => {
+    const { handle, calls, lines } = setup()
+    const value = { ...request({ agent: "egm" }), sessionID: "parent" }
+    await handle(value, true)
+    expect(value).toEqual({ ...request({ agent: "egm" }), sessionID: "parent" })
+    expect(calls).toEqual([])
+    expect(lines).toEqual([])
+  })
+
+  test("logs a single removal", async () => {
+    const { handle, lines } = setup()
+    const value = { ...request({ system: [{ type: "text", text: PERSONA }, { type: "text", text: "Another plugin's note." }] }), sessionID: "child" }
+    await handle(value, true)
+    expect(lines).toEqual(["[egm-guard] egm-style: removed 1 injected item(s)"])
+  })
+
+  test("logs nothing when a reviewer's request had nothing to remove", async () => {
+    const { handle, lines } = setup()
+    const value = { ...request({ system: [{ type: "text", text: PERSONA }] }), sessionID: "child" }
+    await handle(value, true)
+    expect(lines).toEqual([])
+  })
+
+  test("refuses a reviewer's request when its own prompt is missing", async () => {
+    const { handle } = setup()
+    const value = { ...request({ system: [instructions([{ key: "core/date", text: "DATE" }])] }), sessionID: "child" }
+    await expect(handle(value, true)).rejects.toThrow(/system prompt not found/)
   })
 })
 
@@ -172,6 +230,10 @@ describe("parseReviewers", () => {
   test("returns the reviewer agent IDs from the installer's options", () => {
     const options = { primary: "egm", bundle: "/b", reviewers: personas }
     expect(parseReviewers(options)).toEqual(new Set(["egm-style", "egm-structural"]))
+  })
+
+  test("accepts a single reviewer", () => {
+    expect(parseReviewers({ reviewers: { "egm-style": "/b/agents/style.md" } })).toEqual(new Set(["egm-style"]))
   })
 
   test.each([
