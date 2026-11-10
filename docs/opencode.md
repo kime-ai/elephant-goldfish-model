@@ -172,8 +172,10 @@ The scoped OpenCode native probe uses a scripted local model, not a live model.
 It checks native child dispatch, one parent marker, and denial of a synthetic
 `.env` read. It also checks that a project `AGENTS.md` reaches the orchestrator but not the
 reviewer, and that a nested `AGENTS.md` loaded by a reviewer read is removed while the file's
-content arrives. CI uses the pinned OpenCode 1.18.29 Linux x64 executable; the
-`opencode-darwin-arm64@1.18.29` package runs the same probe on Apple silicon.
+content arrives. `--host v2` runs the same checks against the
+[V2 adapter](opencode_v2.md#native-probe). The probe accepts any release of the adapter's major
+version and records the one it ran. The pinned Linux x64 executables are in
+`tests/integration/opencode-ci`:
 
 ```sh
 npm ci --ignore-scripts --prefix tests/integration/opencode-ci
@@ -183,7 +185,8 @@ python tests/integration/opencode_native_probe.py \
   --output /tmp/egm-opencode-probe-new
 ```
 
-Choose an output path that does not exist. A passing probe does not establish
+On another platform, install that platform's package, such as `opencode-darwin-arm64@1.18.29`,
+and pass its `bin/opencode`. Choose an output path that does not exist. A passing probe does not establish
 live model behavior, full workflows, or general reviewer isolation.
 
 On 2026-10-24, OpenCode `1.18.29` accepted the generated configuration through `debug config` and `debug agent egm-style`.

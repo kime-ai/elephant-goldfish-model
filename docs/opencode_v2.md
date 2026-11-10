@@ -123,4 +123,26 @@ installed. The same directory holds the V1 entry, `v1.ts`; see the
 - V2 adds `AGENTS.md` to each agent's instructions, including reviewers; the
   isolation plugin removes it for reviewers. A fresh child session is still not
   proof of Goldfish isolation; see the V1 verification limits.
-- The V1 native probe and trace verifier target 1.18.29 and do not run on V2.
+- The trace verifier targets 1.18.29 and does not run on V2. The native probe runs on
+  both; see [Native probe](#native-probe).
+
+## Native probe
+
+`tests/integration/opencode_native_probe.py --host v2` installs this adapter and runs
+`opencode run --standalone` against a scripted local model. It checks native `subagent`
+dispatch, that a parent-only marker stays out of the reviewer, that the reviewer's `.env` read
+and `skill` call are denied, and that a project `AGENTS.md` reaches `egm` but neither it nor a
+nested `AGENTS.md` reaches the reviewer. V2 offers reviewers the `skill` tool despite their
+`*` deny and refuses the call; the probe requires exactly `read`, `glob`, and `skill`.
+
+```sh
+npm install --prefix /absolute/opencode-v2 @opencode/cli-linux-x64@2.2.5
+python tests/integration/opencode_native_probe.py --host v2 \
+  --source . \
+  --opencode /absolute/opencode-v2/node_modules/@opencode/cli-linux-x64/bin/opencode \
+  --output /tmp/egm-opencode-v2-probe
+```
+
+On another platform, install that platform's package, such as
+`@opencode/cli-darwin-arm64@2.2.5`, and pass its `bin/opencode`. A passing probe does not
+establish live model behavior, full workflows, or general reviewer isolation.
