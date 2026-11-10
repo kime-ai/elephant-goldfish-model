@@ -14,6 +14,11 @@ import shutil
 
 ROOT = Path(__file__).resolve().parents[2]
 ISOLATION_PLUGIN = Path("adapters/opencode/goldfish_isolation")
+# Instruction files the host injects into every agent. Goldfish reviewers must not read them;
+# each name is matched at the worktree root and in any directory, never as a suffix.
+INSTRUCTION_FILES = {
+    "v2": ("AGENTS.md", "agents.md"),
+}
 REVIEWERS = (
     "codebase_details", "comprehension", "design_critic",
     "implementation_readiness", "inventive_catalyst", "structural", "style", "zoom_out",
@@ -182,6 +187,11 @@ def v1_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
     }
 
 
+def instruction_patterns(host: str) -> list[str]:
+    """Read patterns for the host's instruction files, at the root and in any directory."""
+    return [pattern for filename in INSTRUCTION_FILES[host] for pattern in (filename, f"*/{filename}")]
+
+
 def rule(action: str, resource: str, effect: str) -> dict:
     return {"action": action, "resource": resource, "effect": effect}
 
@@ -207,8 +217,7 @@ def v2_config(bundle: Path, skills: Path, context: str, commands: dict) -> dict:
                 rule("read", "*.env.example", "allow"),
                 # Goldfish isolation; the plugin removes injected AGENTS.md, this blocks
                 # direct reads. The lowercase rule covers case-insensitive filesystems.
-                rule("read", "*AGENTS.md", "deny"),
-                rule("read", "*agents.md", "deny"),
+                *(rule("read", pattern, "deny") for pattern in instruction_patterns("v2")),
                 rule("glob", "*", "allow"),
                 rule("external_directory", "*", "deny"),
                 rule("external_directory", bundle_dir, "allow"),

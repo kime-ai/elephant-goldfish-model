@@ -301,6 +301,7 @@ def test_v2_permissions_enforce_reviewer_boundary(tmp_path: Path) -> None:
         instructions = ("AGENTS.md", "pkg/AGENTS.md", "/home/u/.config/opencode/AGENTS.md", "agents.md")
         for path in instructions:
             assert v2_effect(rules, "read", path) == ("deny" if reviewer else "allow"), (name, path)
+        assert v2_effect(rules, "read", "SUBAGENTS.md") == "allow", name
         assert v2_effect(rules, "todowrite", "*") == ("deny" if reviewer else "allow")
         if reviewer:
             assert v2_effect(rules, "read", "README.md") == "allow"
