@@ -115,7 +115,9 @@ def main() -> None:
     thread.start()
     try:
         with tempfile.TemporaryDirectory(prefix='egm-native-probe-') as root:
-            root = Path(root)
+            # Canonical paths: on macOS /var is a symlink, and OpenCode would treat
+            # the unresolved fixture paths as external directories.
+            root = Path(root).resolve()
             project, home, install = (
                 root / 'project',
                 root / 'home',
