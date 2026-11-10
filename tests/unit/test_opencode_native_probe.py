@@ -100,3 +100,11 @@ def test_each_guide_targets_the_host_release_the_installer_names() -> None:
     for name, host in INSTALLER["INTERFACES"].items():
         guide = (ROOT / host.guide).read_text().split("\n## ")[0]
         assert re.search(rf"targets OpenCode (CLI )?\*\*{re.escape(host.probed)}\*\*", guide), name
+
+
+def test_each_guide_cites_interface_sources_at_the_release_the_installer_names() -> None:
+    for name, host in INSTALLER["INTERFACES"].items():
+        guide = (ROOT / host.guide).read_text()
+        tags = re.findall(r"github\.com/anomalyco/opencode/blob/(v[^/]+)/", guide)
+        assert tags, name
+        assert set(tags) == {f"v{host.probed}"}, name
