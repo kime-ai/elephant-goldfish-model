@@ -6,7 +6,7 @@ name: OpenCode latest releases
 # The isolation plugins depend on experimental OpenCode hooks and on how OpenCode renders
 # instructions, which can change in any release. This probes the newest release of each major
 # version weekly. It never runs on pull requests, so upstream releases cannot block changes;
-# a red run means do not upgrade yet. See "Host versions" in docs/opencode.md.
+# a red run means do not upgrade yet. See "Interface versions" in docs/opencode.md.
 on:
   schedule:
     - cron: '17 6 * * 1'
