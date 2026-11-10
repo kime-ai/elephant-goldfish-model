@@ -171,3 +171,19 @@ python tests/integration/opencode_native_probe.py --interface v2 \
 On another platform, install that platform's package, such as
 `@opencode/cli-darwin-arm64@2.2.6`, and pass its `bin/opencode`. A passing probe does not
 establish live model behavior, full workflows, or general reviewer isolation.
+
+## Interface sources
+
+Read at the `v2.2.6` tag on 2026-11-10. These source files define the agent, command, skill,
+permission, `subagent`, and instruction interfaces this adapter uses. The plugin hooks that the
+isolation plugin uses are typed in the `@opencode/plugin` package, which the plugin's type check
+runs against:
+
+- [Agent schema](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/schema/src/agent.ts): the fields of an agent, including `system`, `mode`, and `permissions`
+- [Agent configuration](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/src/config/plugin/agent.ts)
+- [Command configuration](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/src/config/plugin/command.ts)
+- [Skill discovery](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/src/config/plugin/skill.ts)
+- [Permission evaluation](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/src/permission.ts)
+- [`subagent` tool](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/src/tool/plugin/subagent.ts)
+- [Request assembly and instruction sources](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/src/session/model-request.ts)
+- [Nested instruction loading](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/src/session/instructions.ts)
