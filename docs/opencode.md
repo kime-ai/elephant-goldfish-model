@@ -2,9 +2,9 @@
 
 # OpenCode V1 integration (experimental)
 
-This adapter targets OpenCode CLI 1.x, with V1 `task` and `permission` interfaces.
-The native probe passes on **1.18.29**. That is not a support claim; see
-[Host versions](#host-versions) for what the probe covers and for other 1.x releases.
+This adapter targets OpenCode CLI **1.18.29**, with V1 `task` and `permission` interfaces.
+The native probe passes on that release, which is not a support claim. Other 1.x releases are
+not claimed; see [Host versions](#host-versions).
 It does not target V2 `subagent` or `permissions` interfaces; for OpenCode 2.x, see the [V2 integration](opencode_v2.md).
 Installation checks do not establish workflow or isolation support.
 Maintainer approval, live workflows, and isolation verification remain pending under [#146](https://github.com/google/elephant-goldfish-model/issues/146).

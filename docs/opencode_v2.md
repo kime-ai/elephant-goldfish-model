@@ -2,10 +2,10 @@
 
 # OpenCode V2 integration (experimental)
 
-This adapter targets OpenCode 2.x with the native V2 `agents`,
-`permissions`, `commands`, and `subagent` interfaces. The native probe passes on **2.2.6**;
-that is not a support claim. See [Host versions](opencode.md#host-versions) for what the probe
-covers and for other 2.x releases. For OpenCode 1.x, use the
+This adapter targets OpenCode **2.2.6** with the native V2 `agents`,
+`permissions`, `commands`, and `subagent` interfaces. The native probe passes on that release,
+which is not a support claim. Other 2.x releases are not claimed; see
+[Host versions](opencode.md#host-versions). For OpenCode 1.x, use the
 [V1 integration](opencode.md). Installation checks do not establish workflow or
 isolation support; the verification steps in the V1 guide still apply.
 

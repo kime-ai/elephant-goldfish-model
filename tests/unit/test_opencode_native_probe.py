@@ -5,6 +5,7 @@
 
 import json
 from pathlib import Path
+import re
 import runpy
 
 import pytest
@@ -92,3 +93,10 @@ def test_neither_workflow_needs_conditional_steps_or_failure_overrides() -> None
 
 def test_probe_and_installer_select_the_same_interfaces() -> None:
     assert set(PROBE["INTERFACES"]) == set(INSTALLER["INTERFACES"]) == {"v1", "v2"}
+
+
+def test_each_guide_targets_the_host_release_the_installer_names() -> None:
+    # #146 scopes the adapter to one host release; other releases are not claimed.
+    for name, host in INSTALLER["INTERFACES"].items():
+        guide = (ROOT / host.guide).read_text().split("\n## ")[0]
+        assert re.search(rf"targets OpenCode (CLI )?\*\*{re.escape(host.probed)}\*\*", guide), name
