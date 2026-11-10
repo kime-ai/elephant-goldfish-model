@@ -29,34 +29,25 @@ on:
       - 'plugin.json'
       - 'tests/integration/opencode-ci/**'
       - 'tests/integration/opencode_native_probe.py'
-  # New OpenCode releases change nothing in this repository, so probe the latest ones weekly.
-  schedule:
-    - cron: '17 6 * * 1'
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   native-probe:
-    name: native-probe (${{ matrix.host }}, ${{ matrix.channel }})
+    name: native-probe (${{ matrix.host }})
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # The pinned versions are the verified ones. A failing latest release reports without
-    # blocking unrelated changes; see "Host versions" in docs/opencode.md.
-    continue-on-error: ${{ matrix.channel == 'latest' }}
     strategy:
       fail-fast: false
       matrix:
-        host: [v1, v2]
-        channel: [pinned, latest]
         include:
           - host: v1
             package: opencode-linux-x64
-            major: '1'
+            binary: node_modules/opencode-linux-x64/bin/opencode
           - host: v2
             package: '@opencode/cli-linux-x64'
-            major: '2'
+            binary: node_modules/@opencode/cli-linux-x64/bin/opencode
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -67,26 +58,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
-      - name: Install pinned OpenCode executable
-        if: matrix.channel == 'pinned'
+      - name: Install pinned OpenCode executables
         working-directory: tests/integration/opencode-ci
-        env:
-          PACKAGE: ${{ matrix.package }}
-        run: |
-          npm ci --ignore-scripts
-          echo "OPENCODE=$PWD/node_modules/$PACKAGE/bin/opencode" >> "$GITHUB_ENV"
-      - name: Install latest OpenCode executable of this major version
-        if: matrix.channel == 'latest'
-        env:
-          PACKAGE: ${{ matrix.package }}
-          MAJOR: ${{ matrix.major }}
-          PREFIX: ${{ runner.temp }}/opencode-latest
-        run: |
-          npm install --no-save --no-package-lock --ignore-scripts --prefix "$PREFIX" "$PACKAGE@$MAJOR"
-          echo "OPENCODE=$PREFIX/node_modules/$PACKAGE/bin/opencode" >> "$GITHUB_ENV"
+        run: npm ci --ignore-scripts
       - name: Exercise native child permissions and instruction isolation
         env:
           HOST: ${{ matrix.host }}
+          OPENCODE: tests/integration/opencode-ci/${{ matrix.binary }}
           PROBE_OUTPUT: ${{ runner.temp }}/opencode-native-probe
         run: >-
           python tests/integration/opencode_native_probe.py
@@ -94,12 +72,3 @@ jobs:
           --source .
           --opencode "$OPENCODE"
           --output "$PROBE_OUTPUT"
-      - name: Record the probed version
-        if: always()
-        env:
-          HOST: ${{ matrix.host }}
-          CHANNEL: ${{ matrix.channel }}
-          OUTCOME: ${{ job.status }}
-        run: |
-          version=$("$OPENCODE" --version 2>/dev/null || echo unknown)
-          echo "OpenCode $HOST ($CHANNEL): $version, probe $OUTCOME" >> "$GITHUB_STEP_SUMMARY"

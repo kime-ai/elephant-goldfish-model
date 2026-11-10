@@ -242,10 +242,13 @@ The probe accepts any release of the adapter's major version and records the one
 
 The isolation plugins depend on experimental hooks and on how OpenCode renders instructions,
 and either can change in a minor or patch release. A matching major version is therefore not
-evidence of support. The `OpenCode native probe` workflow runs the probe on the verified release
-and on the newest release of each major version, on pull requests, on pushes to `main`, and
-weekly. The verified jobs gate changes. A failing newest-release job is reported without
-blocking unrelated work; treat it as a reason not to upgrade until it is fixed.
+evidence of support. Two workflows cover it:
+
+- `OpenCode native probe` runs the probe on each verified release, on pull requests and pushes
+  to `main`. It gates changes and does not follow upstream releases.
+- `OpenCode latest releases` runs the probe on the newest release of each major version, weekly
+  and on demand. It never runs on pull requests, so an upstream release cannot block a change.
+  A red run means do not upgrade yet.
 
 To move the verified release, run the probe on the new release, then update all three places
 in one change and record the probe summary in the pull request.

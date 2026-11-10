@@ -40,27 +40,51 @@ def test_each_host_names_its_major() -> None:
     assert {name: host.major for name, host in PROBE["HOSTS"].items()} == {"v1": 1, "v2": 2}
 
 
-def native_workflow() -> dict:
-    return yaml.safe_load((ROOT / ".github/workflows/opencode-native.yml").read_text())
+def workflow(name: str) -> dict:
+    return yaml.safe_load((ROOT / f".github/workflows/{name}.yml").read_text())
 
 
-def test_ci_probes_each_host_at_its_pinned_and_latest_version() -> None:
-    workflow = native_workflow()
-    job = workflow["jobs"]["native-probe"]
-    matrix = job["strategy"]["matrix"]
-    assert set(matrix["host"]) == set(PROBE["HOSTS"])
-    assert set(matrix["channel"]) == {"pinned", "latest"}
-    assert {item["host"]: item["major"] for item in matrix["include"]} == {
-        name: str(host.major) for name, host in PROBE["HOSTS"].items()
-    }
-    # A new upstream release must not block unrelated changes; it reports instead.
-    assert job["continue-on-error"] == "${{ matrix.channel == 'latest' }}"
-    # PyYAML reads the "on" key as True.
-    assert workflow[True]["schedule"]
+def matrix(name: str) -> dict:
+    return workflow(name)["jobs"]["native-probe"]["strategy"]["matrix"]
+
+
+def hosts(name: str) -> dict[str, dict]:
+    return {item["host"]: item for item in matrix(name)["include"]}
+
+
+def test_gating_workflow_probes_every_host_at_its_pinned_version() -> None:
+    assert set(hosts("opencode-native")) == set(PROBE["HOSTS"])
+    # Each job installs from the lockfile; nothing here follows upstream releases.
+    steps = workflow("opencode-native")["jobs"]["native-probe"]["steps"]
+    assert any("npm ci" in step.get("run", "") for step in steps)
+    assert "schedule" not in workflow("opencode-native")[True]
 
 
 def test_pinned_executables_are_the_verified_host_versions() -> None:
     pins = json.loads((ROOT / "tests/integration/opencode-ci/package.json").read_text())["dependencies"]
-    packages = {item["host"]: item["package"] for item in native_workflow()["jobs"]["native-probe"]["strategy"]["matrix"]["include"]}
     verified = {name: host.verified for name, host in INSTALLER["HOSTS"].items()}
-    assert {host: pins[package] for host, package in packages.items()} == verified
+    assert {name: pins[item["package"]] for name, item in hosts("opencode-native").items()} == verified
+
+
+def test_pinned_binary_paths_lie_inside_their_packages() -> None:
+    for item in hosts("opencode-native").values():
+        assert item["binary"] == f"node_modules/{item['package']}/bin/opencode"
+
+
+def test_latest_workflow_probes_the_newest_release_of_each_major_on_a_schedule() -> None:
+    triggers = workflow("opencode-latest")[True]
+    assert set(triggers) == {"schedule", "workflow_dispatch"}
+    assert {name: item["major"] for name, item in hosts("opencode-latest").items()} == {
+        name: str(host.major) for name, host in PROBE["HOSTS"].items()
+    }
+    # The latest packages are the pinned ones, floated to the newest of their major version.
+    assert {name: item["package"] for name, item in hosts("opencode-latest").items()} == {
+        name: item["package"] for name, item in hosts("opencode-native").items()
+    }
+
+
+def test_neither_workflow_needs_conditional_steps_or_failure_overrides() -> None:
+    for name in ("opencode-native", "opencode-latest"):
+        job = workflow(name)["jobs"]["native-probe"]
+        assert "continue-on-error" not in job
+        assert not [step for step in job["steps"] if "if" in step]
